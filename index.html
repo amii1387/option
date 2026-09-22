@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Options Dashboard - TSE</title>
+<link rel="stylesheet" href="assets/style.css?v=5.0">
+<script src="assets/app.js?v=5.0" defer></script>
+</head>
+<body>
+
+<div id="loader-overlay" class="loader-overlay">
+    <div class="spinner"></div>
+    <div style="margin-top: 16px; color: var(--teal); font-weight: 700;">در حال دریافت داده‌های زنده...</div>
+</div>
+
+<div class="bg-mesh"><div class="bg-blob"></div></div>
+
+<div id="dash" style="display:none;min-height:100vh;position:relative;z-index:1">
+    <div class="hdr" id="dash-hdr">
+        <div class="hdr-top">
+            <div class="hbrand">
+                <div class="hlogo">📈</div>
+                <div>
+                    <div class="htitle">TSE Options Terminal <span class="htitle-badge">LIVE</span></div>
+                    <div class="hsub" id="live-status">در حال اتصال...</div>
+                </div>
+            </div>
+            <div class="hctrl">
+                <div class="hinfo" style="text-align: left; line-height: 1.3;">
+                    <span id="time-ago" style="font-weight:700; color:var(--teal);">همین الان</span><br>
+                    <span id="lupd" style="font-size:9px; color:var(--dim);">—</span>
+                </div>
+                <!-- Circular Timer -->
+                <div class="circular-timer">
+                    <svg class="timer-svg" viewBox="0 0 36 36">
+                        <path class="timer-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                        <path class="timer-path" id="timer-path" stroke-dasharray="100, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                    </svg>
+                    <div class="timer-text" id="cd">60</div>
+                </div>
+                <button class="btn-sm" id="btn-refresh" onclick="manRefresh()">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+                    <span>آپدیت کش</span>
+                </button>
+                <button class="btn-sm" id="btn-force" onclick="forceUpdateData()">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                    <span>فورس سرور</span>
+                </button>
+                <button class="btn-sm icon-btn" id="theme-toggle" onclick="toggleTheme()" title="تغییر پوسته">🌙</button>
+            </div>
+        </div>
+        <div class="hdr-tabs">
+            <button class="htab active" data-tab="bcs" onclick="switchTab('bcs')">📈 Bull Call Spread <span class="tab-badge" id="tab-badge-bcs">0</span></button>
+            <button class="htab" data-tab="cc" onclick="switchTab('cc')">🛡️ Covered Call <span class="tab-badge" id="tab-badge-cc">0</span></button>
+            <button class="htab" data-tab="collar" onclick="switchTab('collar')">🔒 Collar <span class="tab-badge" id="tab-badge-collar">0</span></button>
+            <button class="htab" data-tab="conversion" onclick="switchTab('conversion')">🔄 Conversion <span class="tab-badge" id="tab-badge-conversion">0</span></button>
+        </div>
+    </div>
+
+    <!-- PAGE: Bull Call Spread -->
+    <div id="page-bcs" class="page-content active">
+        <div class="main">
+            <div class="alert" id="alrt"></div>
+            <!-- Top Golden Contracts Showcase -->
+            <div class="gold-showcase" id="bcs-gold-showcase" style="display:none;">
+                <div class="gold-header">
+                    <span>⭐ قراردادهای طلایی برگزیده (الگوریتم آلفا)</span>
+                    <span class="gold-count" id="bcs-gold">0</span>
+                </div>
+            </div>
+
+            <div class="sgrid">
+                <div class="sc teal"><div class="sc-icon">🎯</div><div class="sc-label">کل استراتژی‌ها</div><div class="sc-value" id="bcs-st">0</div></div>
+                <div class="sc blue"><div class="sc-icon">📊</div><div class="sc-label">میانگین بازدهی</div><div class="sc-value" id="bcs-avg-ret">0%</div></div>
+                <div class="sc amber"><div class="sc-icon">📌</div><div class="sc-label">نماد پایه</div><div class="sc-value" id="bcs-su">0</div></div>
+                <div class="sc purple"><div class="sc-icon">📅</div><div class="sc-label">سررسید</div><div class="sc-value" id="bcs-se">0</div></div>
+            </div>
+
+            <div class="fbar">
+                <div class="fgroup"><span class="fbar-label">نماد:</span><select id="fu" onchange="render()"><option value="">همه</option></select></div>
+                <div class="fdivider"></div>
+                <div class="fgroup"><span class="fbar-label">سررسید:</span><select id="fe" onchange="render()"><option value="">همه</option></select></div>
+                <div class="fdivider"></div>
+                <div class="fgroup"><span class="fbar-label">ارزش (میلیارد ریال):</span><input type="number" id="fvol" step="1" min="0" placeholder="اختیاری" style="width:80px" oninput="render()"></div>
+                <div class="fdivider"></div>
+                <div class="fgroup"><span class="fbar-label">مرتب‌سازی:</span>
+                <select id="fs" onchange="render()">
+                    <option value="gold">⭐ طلایی‌ها اول</option>
+                    <option value="profit">بیشترین حاشیه امنیت</option>
+                    <option value="ret">بیشترین سود</option>
+                    <option value="loss">کمترین ریسک</option>
+                    <option value="debit">کمترین هزینه (Debit)</option>
+                    <option value="atm">نزدیک‌ترین به سر به سر</option>
+                    <option value="days">کمترین روز</option>
+                </select></div>
+            </div>
+
+            <div class="gfp">
+                <div class="gfp-head" onclick="toggleGFP('bcs')">
+                    <div class="gfp-head-l">
+                        <span style="font-size:22px">⚙️</span>
+                        <div><div class="gfp-htitle">تنظیمات فیلتر طلایی (Alpha Scanner)</div><div class="gfp-hdesc">غربالگری بر اساس استراتژی مدیریت ریسک شخصی</div></div>
+                    </div>
+                    <button class="gfp-toggle"><span id="gfp-bcs-arrow">▼</span> نمایش تنظیمات</button>
+                </div>
+                <div class="gfp-body collapsed" id="gfp-bcs-body">
+                    <div class="gfp-sep"></div>
+                    <div class="gfp-row">
+                        <div class="gff"><label>حداقل حاشیه امنیت %</label><input type="number" id="gf-safety" value="5" step="0.5" oninput="render()"></div>
+                        <div class="gff"><label>حداقل پایین‌ترین سود %</label><input type="number" id="gf-worst" value="10" step="0.5" oninput="render()"></div>
+                        <div class="gff"><label>حداقل سود %</label><input type="number" id="gf-ret" value="10" step="0.5" oninput="render()"></div>
+                        <div class="gff"><label>وضعیت K₁</label>
+                            <select id="gf-status" onchange="render()"><option value="">همه</option><option value="OTM">OTM</option><option value="ATM">ATM</option><option value="ITM">ITM</option></select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="twrap">
+                <div class="thdr"><span class="ttitle">ماتریس اسپرد صعودی خرید (BCS)</span><span class="tcnt" id="tcnt">—</span></div>
+                <div class="tscroll">
+                    <table>
+                        <thead><tr>
+                            <th style="width: 40px">عملیات</th><th style="width: 30px">#</th><th class="sticky-col">نماد پایه</th><th>سررسید</th><th>روز</th><th>قیمت سهم</th>
+                            <th>اعمال پایین K₁</th><th>اعمال بالا K₂</th><th>پرمیوم پایین</th><th>پرمیوم بالا</th>
+                            <th>سر به سر</th>
+                            <th style="width:120px">حاشیه امنیت %</th>
+                            <th style="width:120px">بالاترین سود % (ROI)</th>
+                            <th>وضعیت K₁</th><th>ارزش K₁</th><th>ارزش K₂</th>
+                        </tr></thead>
+                        <tbody id="tb"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PAGE: Covered Call -->
+    <div id="page-cc" class="page-content">
+        <div class="main">
+            <div class="sgrid">
+                <div class="sc teal"><div class="sc-icon">🛡️</div><div class="sc-label">کل فرصت‌ها</div><div class="sc-value" id="cc-st">0</div></div>
+                <div class="sc blue"><div class="sc-icon">⭐</div><div class="sc-label">فرصت طلایی</div><div class="sc-value" id="cc-gold">0</div></div>
+                <div class="sc amber"><div class="sc-icon">📅</div><div class="sc-label">بالاترین سود ماهانه</div><div class="sc-value" id="cc-sb">—</div></div>
+                <div class="sc purple"><div class="sc-icon">🔒</div><div class="sc-label">بالاترین حاشیه امنیت</div><div class="sc-value" id="cc-sa">—</div></div>
+            </div>
+            <div class="fbar">
+                <div class="fgroup"><span class="fbar-label">نماد پایه:</span><select id="cc-fu" onchange="renderCC()"><option value="">همه</option></select></div>
+                <div class="fgroup"><span class="fbar-label">سررسید:</span><select id="cc-fe" onchange="renderCC()"><option value="">همه</option></select></div>
+                <div class="fgroup"><span class="fbar-label">وضعیت:</span><select id="cc-fst" onchange="renderCC()"><option value="">همه</option><option value="OTM">OTM</option><option value="ATM">ATM</option><option value="ITM">ITM</option></select></div>
+                <div class="fdivider"></div>
+                <div class="fgroup"><span class="fbar-label">مرتب‌سازی:</span>
+                <select id="cc-fs" onchange="renderCC()">
+                    <option value="monthly">بهترین سود ماهانه</option><option value="total">بهترین سود کل</option>
+                    <option value="safety">بهترین حاشیه امنیت</option><option value="volume">بیشترین ارزش</option>
+                </select></div>
+            </div>
+
+            <div class="gfp">
+                <div class="gfp-head" onclick="toggleGFP('cc')">
+                    <div class="gfp-head-l"><span style="font-size:22px">⚙️</span><div><div class="gfp-htitle">تنظیمات فیلتر طلایی — Covered Call</div></div></div>
+                    <button class="gfp-toggle"><span id="gfp-cc-arrow">▼</span> نمایش تنظیمات</button>
+                </div>
+                <div class="gfp-body collapsed" id="gfp-cc-body">
+                    <div class="gfp-sep"></div>
+                    <div class="gfp-row">
+                        <div class="gff"><label>حداقل سود ماهانه %</label><input type="number" id="ccgf-monthly" value="5" step="0.5" oninput="renderCC()"></div>
+                        <div class="gff"><label>حداقل حاشیه امنیت %</label><input type="number" id="ccgf-safety" value="10" step="0.5" oninput="renderCC()"></div>
+                        <div class="gff"><label>وضعیت قرارداد</label><select id="ccgf-status" onchange="renderCC()"><option value="">همه</option><option value="ITM" selected>ITM</option></select></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="twrap">
+                <div class="thdr"><span class="ttitle">ماتریس فروش پوشش‌دار (Covered Call)</span><span class="tcnt" id="cc-tcnt">—</span></div>
+                <div class="tscroll">
+                    <table>
+                        <thead><tr>
+                            <th>عملیات</th><th>#</th><th>نماد</th><th class="sticky-col">نماد پایه</th><th>سررسید</th><th>روز</th>
+                            <th>قیمت سهم S</th><th>قیمت اعمال K</th><th>پریمیوم P</th><th>ارزش معامله</th>
+                            <th>سود کل %</th><th style="width:120px">سود ماهانه %</th><th style="width:120px">حاشیه امنیت %</th><th>شروع سود</th><th>وضعیت</th>
+                        </tr></thead>
+                        <tbody id="cc-tb"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PAGE: Collar -->
+    <div id="page-collar" class="page-content">
+        <div class="main">
+            <div class="sgrid">
+                <div class="sc teal"><div class="sc-icon">🔒</div><div class="sc-label">کل ترکیب‌ها</div><div class="sc-value" id="col-st">0</div></div>
+                <div class="sc blue"><div class="sc-icon">📈</div><div class="sc-label">ترکیب طلایی</div><div class="sc-value" id="col-gold">0</div></div>
+                <div class="sc amber"><div class="sc-icon">🛡️</div><div class="sc-label">بهترین سود %</div><div class="sc-value" id="col-sbp">—</div></div>
+                <div class="sc purple"><div class="sc-icon">📌</div><div class="sc-label">کمترین ضرر %</div><div class="sc-value" id="col-sbl">—</div></div>
+            </div>
+            <div class="fbar">
+                <div class="fgroup"><span class="fbar-label">نماد پایه:</span><select id="col-fu" onchange="renderCollar()"><option value="">همه</option></select></div>
+                <div class="fgroup"><span class="fbar-label">سررسید:</span><select id="col-fe" onchange="renderCollar()"><option value="">همه</option></select></div>
+                <div class="fdivider"></div>
+                <div class="fgroup"><span class="fbar-label">مرتب‌سازی:</span>
+                <select id="col-fs" onchange="renderCollar()">
+                    <option value="gold">⭐ طلایی‌ها اول</option>
+                    <option value="profit">بیشترین سود</option>
+                    <option value="loss">کمترین ضرر</option>
+                    <option value="net">بیشترین خالص پرمیوم</option>
+                </select></div>
+            </div>
+            <div class="gfp">
+                <div class="gfp-head" onclick="toggleGFP('col')">
+                    <div class="gfp-head-l"><span style="font-size:22px">⚙️</span><div><div class="gfp-htitle">تنظیمات فیلتر طلایی — Collar</div></div></div>
+                    <button class="gfp-toggle"><span id="gfp-col-arrow">▼</span> نمایش تنظیمات</button>
+                </div>
+                <div class="gfp-body collapsed" id="gfp-col-body">
+                    <div class="gfp-sep"></div>
+                    <div class="gfp-row">
+                        <div class="gff"><label>حداقل سود %</label><input type="number" id="col-gf-profit" value="10" step="0.5" oninput="renderCollar()"></div>
+                        <div class="gff"><label>حداکثر ضرر مجاز % (منفی وارد کن)</label><input type="number" id="col-gf-loss" value="-5" step="0.5" oninput="renderCollar()"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="twrap">
+                <div class="thdr"><span class="ttitle">ماتریس حلقه محافظتی (Collar)</span><span class="tcnt" id="col-tcnt">—</span></div>
+                <div class="tscroll">
+                    <table>
+                        <thead><tr>
+                            <th>عملیات</th><th>#</th><th class="sticky-col">نماد پایه</th><th>نماد کال</th><th>نماد پوت</th>
+                            <th>سررسید</th><th>روز</th><th>S</th>
+                            <th>K پوت</th><th>K کال</th>
+                            <th style="color:var(--rose)">P پوت</th><th style="color:var(--teal)">P کال</th>
+                            <th>خالص پرمیوم</th>
+                            <th style="width:120px">حداکثر سود %</th><th style="width:120px">حداکثر ضرر %</th>
+                            <th>سر به سر</th><th>ارزش معاملات</th>
+                        </tr></thead>
+                        <tbody id="col-tb"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PAGE: Conversion -->
+    <div id="page-conversion" class="page-content">
+        <div class="main">
+            <div class="sgrid">
+                <div class="sc teal"><div class="sc-icon">🔄</div><div class="sc-label">کل ترکیب‌ها</div><div class="sc-value" id="cv-st">0</div></div>
+                <div class="sc blue"><div class="sc-icon">📈</div><div class="sc-label">بهترین بازده سالانه</div><div class="sc-value" id="cv-sbr">—</div></div>
+                <div class="sc amber"><div class="sc-icon">📅</div><div class="sc-label">میانگین روز تا سررسید</div><div class="sc-value" id="cv-savg">—</div></div>
+                <div class="sc purple"><div class="sc-icon">🏷️</div><div class="sc-label">نماد پایه</div><div class="sc-value" id="cv-su">0</div></div>
+            </div>
+            <div class="alert" style="background:var(--ld);border:1px solid var(--lb);color:var(--blue);padding:12px;border-radius:10px;font-size:12px;display:block">
+                ℹ️ <strong>استراتژی آربیتراژ Conversion:</strong> خرید سهم + خرید پوت + فروش کال روی یک قیمت اعمال مشترک. ارزش پوزیشن در سررسید دقیقاً معادل K است (سود بدون ریسک). بازده سالانه را با نرخ اوراق مقایسه کنید.
+            </div>
+            <div class="fbar">
+                <div class="fgroup"><span class="fbar-label">نماد پایه:</span><select id="cv-fu" onchange="renderConversion()"><option value="">همه</option></select></div>
+                <div class="fgroup"><span class="fbar-label">سررسید:</span><select id="cv-fe" onchange="renderConversion()"><option value="">همه</option></select></div>
+                <div class="fdivider"></div>
+                <div class="fgroup"><span class="fbar-label">مرتب‌سازی:</span>
+                <select id="cv-fs" onchange="renderConversion()">
+                    <option value="annual">بیشترین بازده سالانه</option>
+                    <option value="ret">بیشترین بازده کل</option>
+                </select></div>
+            </div>
+            <div class="twrap">
+                <div class="thdr"><div class="ttitle">ماتریس آربیتراژ کانورژن (Conversion)</div><div class="tcnt" id="cv-tcnt">—</div></div>
+                <div class="tscroll">
+                    <table>
+                        <thead><tr>
+                            <th>عملیات</th><th>#</th><th class="sticky-col">نماد پایه</th><th>نماد کال</th><th>نماد پوت</th><th>سررسید</th><th>روز</th>
+                            <th>S</th><th>K مشترک</th>
+                            <th>هزینه خالص</th><th>بازده ماهانه %</th><th style="width:140px">بازده کل % (سالانه)</th>
+                        </tr></thead>
+                        <tbody id="cv-tb"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ CALC SIDE DRAWER (تغییر از Modal به Drawer) ══ -->
+<div id="cm-overlay" class="drawer-overlay" onclick="if(event.target===this)closeCalc()">
+    <div class="drawer-box" onclick="event.stopPropagation()">
+        <div class="cm-hdr">
+            <div><div class="cm-title" id="cm-title">🧮 شبیه‌ساز</div><div class="cm-subtitle" id="cm-subtitle"></div></div>
+            <button class="cm-close" onclick="closeCalc()">✕</button>
+        </div>
+        
+        <!-- Payoff Chart Area -->
+        <div class="payoff-chart-container" id="cm-chart-container">
+            <svg id="cm-chart" viewBox="0 0 400 200" preserveAspectRatio="none"></svg>
+        </div>
+
+        <div class="cm-section-label">ورودی‌های محاسباتی</div>
+        <div class="cm-grid" id="cm-inputs"></div>
+        <div class="cm-section-label">خروجی استراتژی در سررسید</div>
+        <div class="cm-results" id="cm-results"></div>
+    </div>
+</div>
+
+</body>
+</html>
