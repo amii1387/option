@@ -1,13 +1,8 @@
 <?php
-// collector/fetch.php
-// توسط Cron هر دقیقه اجرا می‌شود
-// داده را از TSETMC می‌گیرد، نرمال می‌کند، استراتژی‌ها را محاسبه کرده و در latest.json می‌نویسد
-
 require_once __DIR__ . '/normalize.php';
 
 $cfg = require __DIR__ . '/../api/config.php';
 
-// ═══ آماده‌سازی مسیرها ═══
 if (!is_dir($cfg['data_dir'])) @mkdir($cfg['data_dir'], 0755, true);
 if (!is_dir($cfg['log_dir']))  @mkdir($cfg['log_dir'],  0755, true);
 
@@ -16,9 +11,12 @@ $statusFile  = $cfg['data_dir'] . '/status.json';
 $lockFile    = $cfg['data_dir'] . '/collector.lock';
 $logFile     = $cfg['log_dir']  . '/collector-' . date('Y-m-d') . '.log';
 
-// ═══ قفل: جلوگیری از اجرای همزمان ═══
 $lock = fopen($lockFile, 'c');
 if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) {
+    if (defined('IS_MANUAL_UPDATE')) {
+        echo json_encode(['ok' => false, 'message' => 'بروزرسانی در پس‌زمینه در حال انجام است.']);
+        exit;
+    }
     exit(0);
 }
 
@@ -26,29 +24,23 @@ $startTime = microtime(true);
 $logEntry  = ['at' => date('Y-m-d H:i:s'), 'result' => null];
 
 try {
-    // ─── ۱. دریافت داده از TSETMC ───
     $rawJson = fetchFromTsetmc($cfg);
     if (!$rawJson) throw new Exception('Empty response from TSETMC');
 
-    // ─── ۲. پارس JSON ───
     $parsed = json_decode($rawJson, true);
     if (!is_array($parsed)) throw new Exception('Invalid JSON: ' . json_last_error_msg());
 
-    // ─── ۳. نرمال‌سازی ───
     $result = normalizeTsetmcTradeOption($parsed);
     $rows   = $result['rows'];
     $stats  = $result['stats'];
 
-    // ─── ۴. اعتبارسنجی ───
     if (count($rows) < $cfg['min_rows']) {
-        throw new Exception('Too few rows: ' . count($rows) . ' — stats: ' . json_encode($stats, JSON_UNESCAPED_UNICODE));
+        throw new Exception('Too few rows: ' . count($rows));
     }
 
-    // ─── ۵. محاسبه استراتژی‌ها در سرور ───
     require_once __DIR__ . '/strategies.php';
     $strategies = calculateStrategies($rows);
 
-    // ─── ۶. نوشتن atomic ───
     $now = time();
     $payload = [
         'meta' => [
@@ -71,12 +63,9 @@ try {
 
     $logEntry['result'] = 'ok';
     $logEntry['rows']   = count($rows);
-    $logEntry['stats']  = $stats;
 
 } catch (Exception $e) {
-    // ─── خطا: latest.json را دست نزن ───
     $prev = @json_decode(@file_get_contents($statusFile), true) ?: [];
-
     writeAtomic($statusFile, json_encode([
         'success'      => false,
         'last_success' => $prev['last_success'] ?? null,
@@ -88,26 +77,19 @@ try {
     $logEntry['message'] = $e->getMessage();
 }
 
-// ═══ لاگ ═══
 $logEntry['duration_ms'] = round((microtime(true) - $startTime) * 1000);
 @file_put_contents($logFile, json_encode($logEntry, JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND);
-
-// ═══ پاک کردن لاگ‌های قدیمی ═══
 cleanOldLogs($cfg['log_dir'], $cfg['log_retention_days']);
 
 flock($lock, LOCK_UN);
 fclose($lock);
-exit(0);
 
-// ═══════════════════════════════════════════════════
-//                       توابع
-// ═══════════════════════════════════════════════════
+if (!defined('IS_MANUAL_UPDATE')) {
+    exit(0);
+}
 
-/**
- * دریافت داده از TSETMC
- */
-function fetchFromTsetmc(array $cfg)
-{
+// === توابع ===
+function fetchFromTsetmc(array $cfg) {
     $ch = curl_init($cfg['tsetmc_url']);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
@@ -123,27 +105,17 @@ function fetchFromTsetmc(array $cfg)
             'Referer: https://www.tse.ir/',
         ],
     ]);
-
     $body = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $err  = curl_error($ch);
     curl_close($ch);
-
-    if ($code !== 200 || !$body) {
-        throw new Exception("TSETMC HTTP $code — $err");
-    }
+    if ($code !== 200 || !$body) throw new Exception("TSETMC HTTP $code — $err");
     return $body;
 }
 
-/**
- * نوشتن atomic: write به فایل موقت، سپس rename
- */
-function writeAtomic(string $path, string $content)
-{
+function writeAtomic(string $path, string $content) {
     $tmp = $path . '.tmp.' . getmypid() . '.' . mt_rand(1000, 9999);
-    if (@file_put_contents($tmp, $content, LOCK_EX) === false) {
-        throw new Exception("Cannot write to $tmp");
-    }
+    if (@file_put_contents($tmp, $content, LOCK_EX) === false) throw new Exception("Cannot write to $tmp");
     if (!@rename($tmp, $path)) {
         @unlink($tmp);
         throw new Exception("Cannot rename $tmp to $path");
@@ -151,11 +123,7 @@ function writeAtomic(string $path, string $content)
     @chmod($path, 0644);
 }
 
-/**
- * پاک کردن لاگ‌های قدیمی
- */
-function cleanOldLogs(string $dir, int $days)
-{
+function cleanOldLogs(string $dir, int $days) {
     $threshold = time() - ($days * 86400);
     foreach (glob($dir . '/collector-*.log') as $file) {
         if (filemtime($file) < $threshold) @unlink($file);

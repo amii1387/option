@@ -1,4 +1,6 @@
 <?php
+// collector/strategies.php
+
 function calculateStrategies(array $rows): array {
     $calls = [];
     $puts = [];
@@ -40,7 +42,7 @@ function extractUnderlying($sym) {
         'شنا'=>'شپنا','ملت'=>'وبملت','ملی'=>'فملی','ملي'=>'فملي',
         'صاد'=>'وبصادر','جار'=>'وتجارت','تاص'=>'تاصيكو','جوا'=>'جوانه كوچك',
         'مخا'=>'اخابر','همن'=>'خبهمن','ستر'=>'خگستر','راز'=>'هم تراز',
-        'درو'=>'دارونو' // این خط اضافه شد
+        'درو'=>'دارونو'
     ];
     
     $b = trim($sym);
@@ -58,13 +60,16 @@ function extractUnderlying($sym) {
 function buildBCS($calls, $MIN_VOL) {
     $bcs = [];
     $groups = [];
+    
     foreach ($calls as $c) {
+        if ($c['uprice'] <= 0) continue; 
         $groups[$c['underlying'] . '|' . $c['expiry']][] = $c;
     }
 
     foreach ($groups as $group) {
         usort($group, fn($a, $b) => $a['strike'] <=> $b['strike']);
         $len = count($group);
+        
         for ($i = 0; $i < $len - 1; $i++) {
             for ($j = $i + 1; $j < $len; $j++) {
                 $buy = $group[$i];
@@ -81,7 +86,7 @@ function buildBCS($calls, $MIN_VOL) {
 
                 $be = $buy['strike'] + $nd;
                 $rr = $mp / $nd;
-                $sm = $buy['uprice'] > 0 ? (($buy['uprice'] - $be) / $buy['uprice'] * 100) : null;
+                $sm = (($buy['uprice'] - $be) / $buy['uprice']) * 100;
                 
                 $ndb = ($buy['bid'] > 0 && $sell['ask'] > 0) ? $buy['bid'] - $sell['ask'] : null;
                 $rb = ($ndb !== null && $ndb > 0) ? (($ks - $ndb) / $ndb * 100) : null;
@@ -108,6 +113,7 @@ function buildCC($calls) {
     $cc = [];
     foreach ($calls as $c) {
         if ($c['uprice'] <= 0 || $c['days'] <= 0) continue;
+        
         $tp = $c['strike'] + $c['lastP'] - $c['uprice'];
         if ($tp <= 0) continue;
         
@@ -131,12 +137,15 @@ function buildCC($calls) {
 function buildCollar($calls, $puts, $MIN_VOL) {
     $collar = [];
     $putMap = [];
+    
     foreach ($puts as $p) {
+        if ($p['uprice'] <= 0) continue;
         $putMap[$p['underlying'] . '|' . $p['expiry']][] = $p;
     }
 
     foreach ($calls as $c) {
         if ($c['uprice'] <= 0 || $c['volume'] < $MIN_VOL) continue;
+        
         $key = $c['underlying'] . '|' . $c['expiry'];
         if (!isset($putMap[$key])) continue;
 
@@ -168,12 +177,15 @@ function buildCollar($calls, $puts, $MIN_VOL) {
 function buildConversion($calls, $puts, $MIN_VOL) {
     $conv = [];
     $putMap = [];
+    
     foreach ($puts as $p) {
+        if ($p['uprice'] <= 0) continue;
         $putMap[$p['underlying'] . '|' . $p['expiry'] . '|' . $p['strike']] = $p;
     }
 
     foreach ($calls as $c) {
         if ($c['uprice'] <= 0 || $c['days'] <= 0 || $c['volume'] < $MIN_VOL) continue;
+        
         $key = $c['underlying'] . '|' . $c['expiry'] . '|' . $c['strike'];
         if (!isset($putMap[$key])) continue;
         

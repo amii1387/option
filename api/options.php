@@ -1,52 +1,48 @@
 <?php
-// api/options.php
-// Dashboard این را صدا می‌زند و JSON نهایی را می‌گیرد
-
 $cfg = require __DIR__ . '/config.php';
-
-header('Content-Type: application/json; charset=utf-8');
-header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-header('Pragma: no-cache');
-header('Access-Control-Allow-Origin: *');
 
 $latestFile = $cfg['data_dir'] . '/latest.json';
 $statusFile = $cfg['data_dir'] . '/status.json';
 
-// ─── اگر داده هنوز آماده نیست ───
 if (!file_exists($latestFile)) {
     http_response_code(503);
-    echo json_encode([
-        'ok'       => false,
-        'message'  => 'داده هنوز آماده نیست — اولین Collector در حال اجراست',
-        'retry_in' => 5,
-    ], JSON_UNESCAPED_UNICODE);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['ok' => false, 'message' => 'داده آماده نیست', 'retry_in' => 5], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
-// ─── خواندن داده ───
+// مدیریت ETag برای کش
+$mtime = filemtime($latestFile);
+$etag = '"' . md5($mtime) . '"';
+
+header('Cache-Control: public, max-age=15'); 
+header('ETag: ' . $etag);
+
+if (isset($_SERVER['HTTP_IF_NONE_MATCH']) && trim($_SERVER['HTTP_IF_NONE_MATCH']) === $etag) {
+    http_response_code(304);
+    exit;
+}
+
+// فعال‌سازی GZIP
+ob_start('ob_gzhandler');
+
+header('Content-Type: application/json; charset=utf-8');
+header('Access-Control-Allow-Origin: https://hseqi.ir'); // الزامی برای امنیت
+
 $raw = @file_get_contents($latestFile);
-if ($raw === false) {
-    http_response_code(500);
-    echo json_encode(['ok' => false, 'message' => 'Cannot read latest.json'], JSON_UNESCAPED_UNICODE);
-    exit;
-}
-
 $payload = json_decode($raw, true);
+
 if (!is_array($payload)) {
     http_response_code(500);
-    echo json_encode(['ok' => false, 'message' => 'Invalid JSON in latest.json'], JSON_UNESCAPED_UNICODE);
+    echo json_encode(['ok' => false, 'message' => 'Invalid JSON'], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
-// ─── هشدار اگر داده قدیمی است ───
 $age = time() - ($payload['meta']['updated_ts'] ?? 0);
 if ($age > 300) {
-    // بیش از ۵ دقیقه
     $payload['meta']['stale'] = true;
-    $payload['meta']['age_seconds'] = $age;
 }
 
-// ─── اضافه کردن وضعیت Collector ───
 if (file_exists($statusFile)) {
     $status = @json_decode(@file_get_contents($statusFile), true);
     if (is_array($status)) {
@@ -55,3 +51,4 @@ if (file_exists($statusFile)) {
 }
 
 echo json_encode($payload, JSON_UNESCAPED_UNICODE);
+ob_end_flush();
