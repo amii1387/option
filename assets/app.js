@@ -2,6 +2,21 @@
 let strats = { bcs: [], cc: [], collar: [], conversion: [] };
 let cdSec = 60, cdInt = null, _cmType = null;
 
+/* ══ THEME MANAGEMENT ══ */
+function initTheme() {
+    const saved = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', saved);
+}
+function toggleTheme() {
+    const root = document.documentElement;
+    const current = root.getAttribute('data-theme');
+    const target = current === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', target);
+    localStorage.setItem('theme', target);
+    if(document.getElementById('cm-overlay').style.display === 'flex') updateCalc(); 
+}
+initTheme();
+
 /* ══ UTILS & FORMATTERS ══ */
 function showAlert(m) { const el = document.getElementById('alrt'); if(el){ el.textContent = '⚠ ' + m; el.style.display = 'block'; } }
 function hideAlert() { const el = document.getElementById('alrt'); if(el) el.style.display = 'none'; }
@@ -15,6 +30,38 @@ const fVol = v => {
     if (v >= 1e6) return '<span class="ty">' + (v / 1e6).toFixed(1) + 'M</span>';
     return (v / 1e3).toFixed(0) + 'K';
 };
+
+function renderMiniBar(val, maxVal, isGoodPositive) {
+    if (val == null || isNaN(val)) return '<span class="tn">—</span>';
+    let pct = Math.min(100, (Math.abs(val) / maxVal) * 100);
+    let isPositive = val >= 0;
+    let colorClass = (isGoodPositive && isPositive) || (!isGoodPositive && !isPositive) ? 'tg' : 'tr';
+    let barColor = (isGoodPositive && isPositive) || (!isGoodPositive && !isPositive) ? 'var(--secondary)' : 'var(--error)';
+    
+    return `
+    <div class="mini-bar-container">
+        <div class="mini-bar-text"><span class="${colorClass}">${val > 0 ? '+' : ''}${f2(val)}%</span></div>
+        <div class="mini-bar-track">
+            <div class="mini-bar-fill" style="width: ${pct}%; background: ${barColor};"></div>
+        </div>
+    </div>`;
+}
+
+function timeAgo(ts) {
+    const sec = Math.round(Date.now() / 1000 - ts);
+    if (sec < 10) return "همین الان";
+    if (sec < 60) return sec + " ثانیه پیش";
+    if (sec < 3600) return Math.floor(sec / 60) + " دقیقه پیش";
+    return Math.floor(sec / 3600) + " ساعت پیش";
+}
+
+function hideLoader() {
+    const loader = document.getElementById('loader-overlay');
+    if (loader) { 
+        loader.style.opacity = '0'; 
+        setTimeout(() => loader.remove(), 400); 
+    }
+}
 
 /* ══ LAYOUT & TABS ══ */
 function updateLayout() {
@@ -39,9 +86,17 @@ function toggleGFP(id) {
 }
 
 /* ══ LIVE DATA LOADER ══ */
+function setBtnLoading(btnId, isLoading) {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    if (isLoading) btn.classList.add('loading');
+    else btn.classList.remove('loading');
+}
+
 async function forceUpdateData() {
     try {
-        updateLiveStatus(-1, 'در حال تریگر سرور بورس...');
+        setBtnLoading('btn-force', true);
+        updateLiveStatus(-1, 'در حال پردازش در سرور بورس...');
         clearInterval(cdInt);
         const r = await fetch('api/force_update.php');
         const res = await r.json().catch(() => ({}));
@@ -51,27 +106,35 @@ async function forceUpdateData() {
     } catch (e) {
         updateLiveStatus(-1, 'خطا: ' + e.message);
         setTimeout(() => { loadLiveData(false); startCD(); }, 4000);
+    } finally {
+        setBtnLoading('btn-force', false);
+        hideLoader();
     }
 }
 
 async function loadLiveData(manual = false) {
     try {
-        if(manual) updateLiveStatus(-1, 'در حال دریافت اطلاعات...');
+        if(manual) {
+            setBtnLoading('btn-refresh', true);
+            updateLiveStatus(-1, 'در حال دریافت اطلاعات...');
+        }
         
         const r = await fetch('api/options.php?t=' + Date.now());
         if (r.status === 304 && !manual) return;
         
         if (r.status === 503) {
-            updateLiveStatus(-1, 'داده آماده نیست'); return;
+            updateLiveStatus(-1, 'دیتابیس در حال ساخت است...');
+            if (!manual) forceUpdateData();
+            return;
         }
         if (!r.ok) {
-            updateLiveStatus(-1, 'خطای ارتباطی ' + r.status); return;
+            throw new Error('خطای ارتباطی ' + r.status);
         }
 
         const payload = await r.json();
         
         if (!payload.data || Array.isArray(payload.data) || !payload.data.bcs) {
-            updateLiveStatus(-1, 'ساختار داده سرور قدیمی است. در حال بروزرسانی...');
+            updateLiveStatus(-1, 'ساختار داده سرور قدیمی است. تریگر خودکار...');
             if (!manual) forceUpdateData();
             return;
         }
@@ -83,36 +146,39 @@ async function loadLiveData(manual = false) {
             conversion: payload.data.conversion || []
         };
 
-        const loader = document.getElementById('loader-overlay');
-        if (loader) { loader.style.opacity = '0'; setTimeout(() => loader.remove(), 400); }
-
         updateGenericFilters(strats.bcs, 'fu', 'fe'); render();
         updateGenericFilters(strats.cc, 'cc-fu', 'cc-fe'); renderCC();
         updateGenericFilters(strats.collar, 'col-fu', 'col-fe'); renderCollar();
         updateGenericFilters(strats.conversion, 'cv-fu', 'cv-fe'); renderConversion();
 
-        const age = Math.round(Date.now() / 1000 - (payload.meta.updated_ts || 0));
-        updateLiveStatus(age, '');
+        window.lastUpdateTs = payload.meta.updated_ts || Math.floor(Date.now() / 1000);
+        updateLiveStatus(Math.round(Date.now() / 1000 - window.lastUpdateTs), '');
+        
         const lupd = document.getElementById('lupd');
         if(lupd) lupd.textContent = payload.meta.updated_at || '—';
 
-        if (payload.meta.stale || age > 300) showAlert('⚠ داده‌ها قدیمی هستند. Collector متوقف شده است.');
+        if (payload.meta.stale || Math.round(Date.now() / 1000 - window.lastUpdateTs) > 300) showAlert('⚠ داده‌ها قدیمی هستند. Collector متوقف شده است.');
         else hideAlert();
 
     } catch (e) {
-        updateLiveStatus(-1, 'خطای پردازش: ' + e.message);
+        updateLiveStatus(-1, 'خطای دریافت: ' + e.message);
+    } finally {
+        hideLoader();
+        if(manual) setBtnLoading('btn-refresh', false);
     }
 }
 
 function updateLiveStatus(ageSec, msg) {
-    const el = document.getElementById('live-status');
+    const el = document.getElementById('live-status'), ta = document.getElementById('time-ago');
+    if (ta && window.lastUpdateTs) ta.textContent = timeAgo(window.lastUpdateTs);
+
     if (!el) return;
-    if (msg) { el.innerHTML = msg; el.style.color = 'var(--rose)'; return; }
-    if (ageSec < 90) { el.innerHTML = '● بروزرسانی ' + ageSec + ' ثانیه پیش'; el.style.color = 'var(--teal)'; }
-    else { el.innerHTML = '⚠ داده قدیمی (' + Math.round(ageSec / 60) + ' دقیقه)'; el.style.color = 'var(--amber)'; }
+    if (msg) { el.innerHTML = msg; el.style.color = 'var(--error)'; return; }
+    if (ageSec < 90) { el.innerHTML = '● متصل به TSETMC'; el.style.color = 'var(--secondary)'; }
+    else { el.innerHTML = '⚠ داده قدیمی'; el.style.color = 'var(--tertiary)'; }
 }
 
-function manRefresh() { cdSec = 60; loadLiveData(true); }
+function manRefresh() { cdSec = 60; updateCircle(100); loadLiveData(true); }
 
 function updateGenericFilters(d, idU, idE) {
     if (!d || !Array.isArray(d)) return;
@@ -138,31 +204,38 @@ function render() {
     document.getElementById('bcs-st').textContent = list.length;
     document.getElementById('bcs-su').textContent = new Set(list.map(s => s.underlying)).size;
     document.getElementById('bcs-se').textContent = new Set(list.map(s => s.expiry)).size;
-    document.getElementById('bcs-gold').textContent = list.filter(s => s._gold).length;
+    
+    const goldCount = list.filter(s => s._gold).length;
+    document.getElementById('bcs-gold').textContent = goldCount;
+
+    let totalRet = 0; list.forEach(s => totalRet += s.returnPct);
+    const avgRetEl = document.getElementById('bcs-avg-ret');
+    if(avgRetEl) avgRetEl.textContent = list.length ? (totalRet / list.length).toFixed(1) + '%' : '0%';
 
     if (fS === 'gold') list.sort((a, b) => (b._gold?1:0)-(a._gold?1:0) || (b.safetyMargin||-999)-(a.safetyMargin||-999));
     else if (fS === 'profit') list.sort((a, b) => (b.safetyMargin||-999)-(a.safetyMargin||-999));
     else if (fS === 'ret') list.sort((a, b) => b.returnPct - a.returnPct);
+    else if (fS === 'loss') list.sort((a, b) => a.maxLoss - b.maxLoss);
+    else if (fS === 'debit') list.sort((a, b) => a.netDebit - b.netDebit);
+    else if (fS === 'atm') list.sort((a, b) => Math.abs(a.safetyMargin||999) - Math.abs(b.safetyMargin||999));
+    else if (fS === 'days') list.sort((a, b) => a.days - b.days);
     
     document.getElementById('tb').innerHTML = list.map((s, i) => {
         const st = s.k1 < s.uprice * .97 ? '<span class="badge badge-teal">ITM</span>' : s.k1 <= s.uprice * 1.03 ? '<span class="badge badge-amber">ATM</span>' : '<span class="badge badge-rose">OTM</span>';
-        const sd = s.safetyMargin != null ? `<span class="tn ${s.safetyMargin > 0 ? 'tg' : 'tr'}">${f2(s.safetyMargin)}%</span>` : '—';
         const bcsD = encodeURIComponent(JSON.stringify({ t: 'bcs', u: s.underlying, S: s.uprice, k1: s.k1, k2: s.k2, p1: s.p1, p2: s.p2, exp: s.expiry, days: s.days }));
-        
         return `<tr class="${s._gold ? 'is-gold' : ''}">
-            <td style="text-align:center;padding:6px 4px"><button class="calc-btn" onclick="openCalc('${bcsD}')">🧮</button></td>
+            <td style="text-align:center;"><button class="calc-btn" onclick="openCalc('${bcsD}')">🧮</button></td>
             <td style="color:var(--dim);font-size:10px">${i + 1}</td>
-            <td class="tu">${esc(s.underlying)}${s._gold?'⭐':''}</td>
+            <td class="tu sticky-col">${esc(s.underlying)}${s._gold?'⭐':''}</td>
             <td style="font-size:11px;color:var(--muted)">${esc(s.expiry)}</td>
             <td class="tn" style="color:var(--dim);text-align:center">${s.days}</td>
             <td><span class="tn" style="color:var(--muted)">${fN(s.uprice)}</span></td>
             <td class="tn tg"><span style="display:block;font-size:9px;color:var(--dim);font-weight:400">${esc(s.sym1)}</span>${fN(s.k1)}</td>
             <td class="tn tr"><span style="display:block;font-size:9px;color:var(--dim);font-weight:400">${esc(s.sym2)}</span>${fN(s.k2)}</td>
             <td class="tn">${fN(s.p1)}</td><td class="tn">${fN(s.p2)}</td>
-            <td class="tn">${fN(s.breakeven)}</td><td>${sd}</td>
-            <td>${s.retWorst != null ? `<span class="ts">${f2(s.retWorst)}%</span>` : '—'}</td>
-            <td><span class="ts">${f2(s.returnPct)}%</span></td>
-            <td>${s.retBest != null ? `<span class="ts">${f2(s.retBest)}%</span>` : '—'}</td>
+            <td class="tn">${fN(s.breakeven)}</td>
+            <td>${renderMiniBar(s.safetyMargin, 30, true)}</td>
+            <td>${renderMiniBar(s.returnPct, 100, true)}</td>
             <td>${st}</td><td class="tn">${(s.v1/1e9).toFixed(1)}B</td><td class="tn">${(s.v2/1e9).toFixed(1)}B</td>
         </tr>`;
     }).join('');
@@ -182,24 +255,26 @@ function renderCC() {
 
     if (fS === 'monthly') list.sort((a, b) => b.mpct - a.mpct);
     else if (fS === 'total') list.sort((a, b) => b.tpct - a.tpct);
+    else if (fS === 'safety') list.sort((a, b) => b.spct - a.spct);
+    else if (fS === 'volume') list.sort((a, b) => b.volume - a.volume);
     
     document.getElementById('cc-tb').innerHTML = list.map((o, i) => {
         const ccD = encodeURIComponent(JSON.stringify({ t: 'cc', sym: o.symRaw, u: o.underlying, S: o.uprice, K: o.strike, P: o.premium, days: o.days, exp: o.expiry }));
         return `<tr class="${o._gold ? 'is-gold' : ''}">
-            <td style="text-align:center;padding:6px 4px"><button class="calc-btn" onclick="openCalc('${ccD}')">🧮</button></td>
+            <td style="text-align:center;"><button class="calc-btn" onclick="openCalc('${ccD}')">🧮</button></td>
             <td style="color:var(--dim);font-size:10px">${i + 1}</td>
-            <td class="tu" style="font-size:12px">${esc(o.symRaw)}${o._gold ? '⭐' : ''}</td>
-            <td style="color:var(--blue);font-size:11px;font-weight:600">${esc(o.underlying)}</td>
+            <td class="tn" style="font-size:11px">${esc(o.symRaw)}${o._gold ? '⭐' : ''}</td>
+            <td class="tu sticky-col">${esc(o.underlying)}</td>
             <td style="font-size:11px;color:var(--muted)">${esc(o.expiry)}</td>
             <td class="tn" style="color:var(--dim);text-align:center">${o.days}</td>
             <td class="tn" style="color:var(--muted)">${fN(o.uprice)}</td>
             <td class="tn tg">${fN(o.strike)}</td><td class="tn">${fN(o.premium)}</td>
             <td class="tn">${(o.volume/1e9).toFixed(1)}B</td>
             <td><span class="tn ${o.tpct >= 15 ? 'tg' : ''}">${f2(o.tpct)}%</span></td>
-            <td><span class="tn ${o.mpct >= 5 ? 'tg' : ''}" style="font-size:13px;font-weight:700">${f2(o.mpct)}%</span></td>
-            <td><span class="tn">${fN(o.breakeven)}</span> <span class="${o.spct >= 10 ? 'tg' : 'tr'}" style="font-size:10px">(${f2(o.spct)}%)</span></td>
+            <td>${renderMiniBar(o.mpct, 20, true)}</td>
+            <td>${renderMiniBar(o.spct, 20, true)}</td>
             <td><span class="tn">${fN(o.strike)}</span></td>
-            <td><span class="badge badge-${o.status==='ITM'?'teal':'rose'}">${o.status}</span></td>
+            <td><span class="badge badge-${o.status==='ITM'?'teal':o.status==='ATM'?'amber':'rose'}">${o.status}</span></td>
         </tr>`;
     }).join('');
 }
@@ -218,21 +293,25 @@ function renderCollar() {
 
     if (fS === 'gold') list.sort((a, b) => (b._gold?1:0)-(a._gold?1:0) || (b.profitPct - a.profitPct));
     else if (fS === 'profit') list.sort((a, b) => b.profitPct - a.profitPct);
+    else if (fS === 'loss') list.sort((a, b) => a.lossPct - b.lossPct);
+    else if (fS === 'net') list.sort((a, b) => b.netP - a.netP);
     
     document.getElementById('col-tb').innerHTML = list.map((o, i) => {
         const colD = encodeURIComponent(JSON.stringify({ t: 'collar', u: o.underlying, S: o.uprice, Kc: o.Kc, Kp: o.Kp, Pc: o.Pc, Pp: o.Pp, exp: o.expiry, days: o.days }));
         return `<tr class="${o._gold ? 'is-gold' : ''}">
-            <td style="text-align:center;padding:6px 4px"><button class="calc-btn" onclick="openCalc('${colD}')">🧮</button></td>
+            <td style="text-align:center;"><button class="calc-btn" onclick="openCalc('${colD}')">🧮</button></td>
             <td style="color:var(--dim);font-size:10px">${i + 1}</td>
-            <td style="color:var(--blue);font-size:11px;font-weight:600">${esc(o.underlying)}${o._gold?'⭐':''}</td>
-            <td class="tu" style="font-size:11px">${esc(o.callSym)}</td><td class="tu" style="font-size:11px">${esc(o.putSym)}</td>
-            <td style="font-size:11px;color:var(--muted)">${esc(o.expiry)}</td><td class="tn" style="color:var(--dim);text-align:center">${o.days}</td>
+            <td class="tu sticky-col">${esc(o.underlying)}${o._gold?'⭐':''}</td>
+            <td class="tn" style="font-size:10px">${esc(o.callSym)}</td>
+            <td class="tn" style="font-size:10px">${esc(o.putSym)}</td>
+            <td style="font-size:11px;color:var(--muted)">${esc(o.expiry)}</td>
+            <td class="tn" style="color:var(--dim);text-align:center">${o.days}</td>
             <td class="tn" style="color:var(--muted)">${fN(o.uprice)}</td>
             <td class="tn">${fN(o.Kp)}</td><td class="tn tg">${fN(o.Kc)}</td>
             <td class="tn tr">${fN(o.Pp)}</td><td class="tn tg">${fN(o.Pc)}</td>
-            <td class="tn ${o.netP >= 0 ? 'tg' : 'tr'}">${fN(o.netP)}</td>
-            <td><span class="tn ${o.profitPct >= 15 ? 'tg' : ''}" style="font-size:13px;font-weight:700">${f2(o.profitPct)}%</span></td>
-            <td><span class="tn ${o.lossPct >= -5 ? 'tg' : 'tr'}" style="font-size:13px;font-weight:700">${f2(o.lossPct)}%</span></td>
+            <td class="tn ${o.netP >= 0 ? 'tg' : 'tr'}">${o.netP >= 0 ? '+' : ''}${fN(o.netP)}</td>
+            <td>${renderMiniBar(o.profitPct, 30, true)}</td>
+            <td>${renderMiniBar(o.lossPct, -20, false)}</td>
             <td class="tn">${fN(o.breakeven)}</td><td class="tn">${(o.callVol/1e9).toFixed(1)}B</td>
         </tr>`;
     }).join('');
@@ -252,11 +331,13 @@ function renderConversion() {
     document.getElementById('cv-tb').innerHTML = list.map((o, i) => {
         const cvD = encodeURIComponent(JSON.stringify({ t: 'conversion', u: o.underlying, S: o.uprice, K: o.strike, Pc: o.Pc, Pp: o.Pp, days: o.days, exp: o.expiry }));
         return `<tr>
-            <td style="text-align:center;padding:6px 4px"><button class="calc-btn" onclick="openCalc('${cvD}')">🧮</button></td>
+            <td style="text-align:center;"><button class="calc-btn" onclick="openCalc('${cvD}')">🧮</button></td>
             <td style="color:var(--dim);font-size:10px">${i + 1}</td>
-            <td style="color:var(--blue);font-size:11px;font-weight:600">${esc(o.underlying)}</td>
-            <td class="tu" style="font-size:11px">${esc(o.callSym)}</td><td class="tu" style="font-size:11px">${esc(o.putSym)}</td>
-            <td style="font-size:11px;color:var(--muted)">${esc(o.expiry)}</td><td class="tn" style="color:var(--dim);text-align:center">${o.days}</td>
+            <td class="tu sticky-col">${esc(o.underlying)}</td>
+            <td class="tn" style="font-size:10px">${esc(o.callSym)}</td>
+            <td class="tn" style="font-size:10px">${esc(o.putSym)}</td>
+            <td style="font-size:11px;color:var(--muted)">${esc(o.expiry)}</td>
+            <td class="tn" style="color:var(--dim);text-align:center">${o.days}</td>
             <td class="tn" style="color:var(--muted);text-align:center">${fN(o.uprice)}</td>
             <td class="tn tg" style="text-align:center">${fN(o.strike)}</td>
             <td class="tn" style="text-align:center">${fN(o.netCost)}</td>
@@ -266,72 +347,7 @@ function renderConversion() {
     }).join('');
 }
 
-/* ══ CALCULATORS LOGIC ══ */
-let bcsOpen = false, ccOpen = false;
-function toggleCalcBCS() { bcsOpen = !bcsOpen; document.getElementById('cb-body-bcs').classList.toggle('collapsed', !bcsOpen); document.getElementById('cb-head-bcs').classList.toggle('is-open', bcsOpen); document.getElementById('cb-arrow-bcs').textContent = bcsOpen ? '▲' : '▼'; document.getElementById('cb-lbl-bcs').textContent = bcsOpen ? 'بستن' : 'باز کردن'; setTimeout(updateLayout, 400); }
-function toggleCalcCC() { ccOpen = !ccOpen; document.getElementById('cb-body-cc').classList.toggle('collapsed', !ccOpen); document.getElementById('cb-head-cc').classList.toggle('is-open', ccOpen); document.getElementById('cb-arrow-cc').textContent = ccOpen ? '▲' : '▼'; document.getElementById('cb-lbl-cc').textContent = ccOpen ? 'بستن' : 'باز کردن'; setTimeout(updateLayout, 400); }
-
-function calcManual() {
-    const p1 = parseFloat(document.getElementById('ci-p1').value) || 0, k1 = parseFloat(document.getElementById('ci-k1').value) || 0;
-    const p2 = parseFloat(document.getElementById('ci-p2').value) || 0, k2 = parseFloat(document.getElementById('ci-k2').value) || 0;
-    const s = parseFloat(document.getElementById('ci-s').value) || 0, ep1 = parseFloat(document.getElementById('ci-ep1').value) || 0, ep2 = parseFloat(document.getElementById('ci-ep2').value) || 0;
-    const errEl = document.getElementById('calc-err'), posEl = document.getElementById('pos-section');
-    const setV = (id, val, cls) => { const el = document.getElementById(id); el.textContent = val; if (cls) el.className = 'co-val ' + cls; };
-    const reset = () => { ['co-debit', 'co-profit', 'co-loss', 'co-rr', 'co-ret', 'co-be', 'co-safety', 'co-open-ret', 'co-pnl', 'co-now-ret', 'co-coverage'].forEach(id => document.getElementById(id).textContent = '—'); posEl.style.display = 'none'; };
-    
-    if (!p1 || !k1 || !p2 || !k2) { reset(); errEl.style.display = 'none'; return; }
-    if (k2 <= k1) { reset(); errEl.textContent = '⚠ K₂ باید از K₁ بزرگ‌تر باشد'; errEl.style.display = 'block'; return; }
-    if (p1 <= p2) { reset(); errEl.textContent = '⚠ P₁ باید از P₂ بزرگ‌تر باشد'; errEl.style.display = 'block'; return; }
-    
-    errEl.style.display = 'none';
-    const nd = p1 - p2, ks = k2 - k1, mp = ks - nd, ml = nd, be = k1 + nd, rr = mp / nd, ret = rr * 100, safety = s > 0 ? (k1 - s) / s * 100 : null;
-    
-    if (mp <= 0) { reset(); errEl.textContent = '⚠ Max Profit منفی است'; errEl.style.display = 'block'; setV('co-debit', fN(nd), 'v-amber'); setV('co-loss', fN(ml), 'v-rose'); return; }
-    
-    setV('co-debit', fN(nd), 'v-amber'); setV('co-profit', fN(mp), 'v-teal'); setV('co-loss', fN(ml), 'v-rose');
-    setV('co-rr', f2(rr) + 'x', rr >= 2 ? 'v-teal' : rr >= 1 ? 'v-blue' : 'v-rose');
-    document.getElementById('co-ret').textContent = f2(ret) + '%'; document.getElementById('co-be').textContent = fN(be);
-    if (safety !== null) setV('co-safety', (safety > 0 ? '+' : '') + f2(safety) + '%', safety < 0 ? 'v-teal' : safety < 5 ? 'v-amber' : 'v-rose');
-    else document.getElementById('co-safety').textContent = '—';
-    
-    if (ep1 > 0 && ep2 > 0) {
-        posEl.style.display = 'block';
-        const od = ep1 - ep2, omp = ks - od, oret = od > 0 && omp > 0 ? omp / od * 100 : null;
-        const cn = p1 - p2, pnl = cn - od, nr = od > 0 ? pnl / od * 100 : null, cov = omp > 0 ? pnl / omp * 100 : null;
-        setV('co-open-ret', oret != null ? f2(oret) + '%' : '⚠', oret != null && oret >= 0 ? 'v-blue' : 'v-rose');
-        setV('co-pnl', (pnl >= 0 ? '+' : '') + fN(pnl), pnl >= 0 ? 'v-teal' : 'v-rose');
-        setV('co-now-ret', nr != null ? (nr >= 0 ? '+' : '') + f2(nr) + '%' : '—', nr != null ? (nr >= 0 ? 'v-teal' : 'v-rose') : '');
-        setV('co-coverage', cov != null ? f2(cov) + '%' : '—', cov != null ? (cov >= 50 ? 'v-teal' : cov >= 0 ? 'v-amber' : 'v-rose') : '');
-    } else { posEl.style.display = 'none'; }
-}
-
-function calcCCOffset() {
-    const s0 = parseFloat(document.getElementById('cco-s0').value) || 0, snow = parseFloat(document.getElementById('cco-snow').value) || 0;
-    const psold = parseFloat(document.getElementById('cco-psold').value) || 0, pnow = parseFloat(document.getElementById('cco-pnow').value) || 0;
-    const errEl = document.getElementById('cco-err'), bd = document.getElementById('cco-bd');
-    const setV = (id, val, cls) => { const el = document.getElementById(id); el.textContent = val; if (cls) el.className = 'co-val ' + cls; };
-    const resetOut = () => { ['cco-orig', 'cco-now', 'cco-cov'].forEach(id => { document.getElementById(id).textContent = '—'; document.getElementById(id).className = 'co-val'; }); bd.style.display = 'none'; };
-    
-    if (!s0 || !psold) { resetOut(); errEl.style.display = 'none'; return; }
-    if (psold >= s0) { resetOut(); errEl.textContent = '⚠ پریمیوم فروش نباید از قیمت خرید سهم بیشتر باشد'; errEl.style.display = 'block'; return; }
-    errEl.style.display = 'none';
-    
-    const cb = s0 - psold, origRet = psold / cb * 100;
-    setV('cco-orig', (origRet >= 0 ? '+' : '') + origRet.toFixed(2) + '%', 'v-blue');
-    
-    if (!snow && !pnow) return;
-    const sPnL = snow - s0, oPnL = psold - pnow, tPnL = sPnL + oPnL;
-    const nowRet = tPnL / cb * 100, cov = psold > 0 ? tPnL / psold * 100 : 0;
-    setV('cco-now', (nowRet >= 0 ? '+' : '') + nowRet.toFixed(2) + '%', nowRet >= 0 ? 'v-teal' : 'v-rose');
-    setV('cco-cov', (cov >= 0 ? '+' : '') + cov.toFixed(2) + '%', cov >= 100 ? 'v-teal' : cov >= 50 ? 'v-amber' : cov >= 0 ? 'v-amber' : 'v-rose');
-    
-    bd.style.display = 'flex';
-    const sp = document.getElementById('cco-s-pnl'), op = document.getElementById('cco-o-pnl'), tp = document.getElementById('cco-t-pnl');
-    sp.textContent = (sPnL >= 0 ? '+' : '') + fN(sPnL); sp.style.color = sPnL >= 0 ? 'var(--teal)' : 'var(--rose)';
-    op.textContent = (oPnL >= 0 ? '+' : '') + fN(oPnL); op.style.color = oPnL >= 0 ? 'var(--teal)' : 'var(--rose)';
-    tp.textContent = (tPnL >= 0 ? '+' : '') + fN(tPnL); tp.style.color = tPnL >= 0 ? 'var(--teal)' : 'var(--rose)';
-}
-
+/* ══ CALC DRAWER & DYNAMIC SVG CHART ══ */
 function closeCalc() { document.getElementById('cm-overlay').style.display = 'none'; document.body.style.overflow = ''; }
 
 function openCalc(jsonData) {
@@ -342,34 +358,33 @@ function openCalc(jsonData) {
     
     let title, subtitle, inputs;
     if (d.t === 'bcs') {
-        title = '🧮 Bull Call Spread'; subtitle = `نماد پایه: ${d.u} | سررسید: ${d.exp || ''} | ${d.days || 0} روز`;
+        title = 'Bull Call Spread'; subtitle = `${d.u} | سررسید: ${d.exp || ''} | ${d.days || 0} روز`;
         inputs = `<div class="cm-field"><label>قیمت سهم پایه (S)</label><input id="cm-S" type="number" value="${d.S || 0}" oninput="updateCalc()"></div>
                   <div class="cm-field"><label>اعمال پایین K₁</label><input id="cm-k1" type="number" value="${d.k1 || 0}" oninput="updateCalc()"></div>
                   <div class="cm-field"><label>اعمال بالا K₂</label><input id="cm-k2" type="number" value="${d.k2 || 0}" oninput="updateCalc()"></div>
-                  <div class="cm-field"><label>پرمیوم کال پایین P₁</label><input id="cm-p1" type="number" value="${d.p1 || 0}" oninput="updateCalc()"></div>
-                  <div class="cm-field"><label>پرمیوم کال بالا P₂</label><input id="cm-p2" type="number" value="${d.p2 || 0}" oninput="updateCalc()"></div>`;
+                  <div class="cm-field"><label>پرمیوم پایین P₁ (خرید)</label><input id="cm-p1" type="number" value="${d.p1 || 0}" oninput="updateCalc()"></div>
+                  <div class="cm-field"><label>پرمیوم بالا P₂ (فروش)</label><input id="cm-p2" type="number" value="${d.p2 || 0}" oninput="updateCalc()"></div>`;
     } else if (d.t === 'cc') {
-        title = '🧮 Covered Call'; subtitle = `نماد: ${d.sym || ''} | پایه: ${d.u || ''} | ${d.days || 0} روز`;
+        title = 'Covered Call'; subtitle = `${d.sym || ''} | پایه: ${d.u || ''} | ${d.days || 0} روز`;
         inputs = `<div class="cm-field"><label>قیمت سهم پایه (S)</label><input id="cm-S" type="number" value="${d.S || 0}" oninput="updateCalc()"></div>
                   <div class="cm-field"><label>قیمت اعمال (K)</label><input id="cm-K" type="number" value="${d.K || 0}" oninput="updateCalc()"></div>
                   <div class="cm-field"><label>پرمیوم دریافتی (P)</label><input id="cm-P" type="number" value="${d.P || 0}" oninput="updateCalc()"></div>
                   <div class="cm-field"><label>روزهای باقیمانده</label><input id="cm-days" type="number" value="${d.days || 0}" oninput="updateCalc()"></div>`;
     } else if (d.t === 'collar') {
-        title = '🧮 Collar'; subtitle = `نماد پایه: ${d.u || ''} | سررسید: ${d.exp || ''} | ${d.days || 0} روز`;
+        title = 'Collar (حلقه محافظتی)'; subtitle = `${d.u || ''} | سررسید: ${d.exp || ''} | ${d.days || 0} روز`;
         inputs = `<div class="cm-field"><label>قیمت سهم پایه (S)</label><input id="cm-S" type="number" value="${d.S || 0}" oninput="updateCalc()"></div>
                   <div class="cm-field"><label>اعمال کال (Kc)</label><input id="cm-Kc" type="number" value="${d.Kc || 0}" oninput="updateCalc()"></div>
                   <div class="cm-field"><label>اعمال پوت (Kp)</label><input id="cm-Kp" type="number" value="${d.Kp || 0}" oninput="updateCalc()"></div>
                   <div class="cm-field"><label>پرمیوم کال دریافتی (Pc)</label><input id="cm-Pc" type="number" value="${d.Pc || 0}" oninput="updateCalc()"></div>
                   <div class="cm-field"><label>پرمیوم پوت پرداختی (Pp)</label><input id="cm-Pp" type="number" value="${d.Pp || 0}" oninput="updateCalc()"></div>`;
     } else if (d.t === 'conversion') {
-        title = '🧮 Conversion'; subtitle = `نماد پایه: ${d.u || ''} | سررسید: ${d.exp || ''} | ${d.days || 0} روز`;
+        title = 'Conversion Arbitrage'; subtitle = `${d.u || ''} | سررسید: ${d.exp || ''} | ${d.days || 0} روز`;
         inputs = `<div class="cm-field"><label>قیمت سهم پایه (S)</label><input id="cm-S" type="number" value="${d.S || 0}" oninput="updateCalc()"></div>
                   <div class="cm-field"><label>قیمت اعمال مشترک (K)</label><input id="cm-K" type="number" value="${d.K || 0}" oninput="updateCalc()"></div>
                   <div class="cm-field"><label>پرمیوم کال دریافتی (Pc)</label><input id="cm-Pc" type="number" value="${d.Pc || 0}" oninput="updateCalc()"></div>
                   <div class="cm-field"><label>پرمیوم پوت پرداختی (Pp)</label><input id="cm-Pp" type="number" value="${d.Pp || 0}" oninput="updateCalc()"></div>
                   <div class="cm-field"><label>روزهای باقیمانده</label><input id="cm-days" type="number" value="${d.days || 0}" oninput="updateCalc()"></div>`;
     }
-    
     document.getElementById('cm-title').textContent = title;
     document.getElementById('cm-subtitle').textContent = subtitle;
     document.getElementById('cm-inputs').innerHTML = inputs;
@@ -379,72 +394,132 @@ function openCalc(jsonData) {
 function updateCalc() {
     const g = id => { const el = document.getElementById(id); return el ? parseFloat(el.value) || 0 : 0; };
     const fStr = n => (!isFinite(n) || isNaN(n)) ? '—' : Math.round(n).toLocaleString('en-US');
-    const fPct = n => (!isFinite(n) || isNaN(n)) ? '—' : n.toFixed(2) + '%';
+    const fPct = n => (!isFinite(n) || isNaN(n)) ? '—' : n.toFixed(1) + '%';
     const res = document.getElementById('cm-results');
     if (!res) return;
     
-    let html = '';
+    let html = '', S, bep;
+    
     if (_cmType === 'bcs') {
-        const S = g('cm-S'), k1 = g('cm-k1'), k2 = g('cm-k2'), p1 = g('cm-p1'), p2 = g('cm-p2');
-        const nd = p1 - p2, mp = k2 - k1 - nd, be = k1 + nd, sm = S > 0 ? (S - be) / S * 100 : NaN, rr = nd > 0 ? mp / nd * 100 : NaN;
-        html = `<div class="cm-res"><div class="cm-res-lbl">هزینه استراتژی</div><div class="cm-res-val" style="color:var(--amber)">${fStr(nd)}</div></div>
+        S = g('cm-S'); const k1 = g('cm-k1'), k2 = g('cm-k2'), p1 = g('cm-p1'), p2 = g('cm-p2');
+        const nd = p1 - p2, mp = k2 - k1 - nd; bep = k1 + nd; 
+        const sm = S > 0 ? (S - bep) / S * 100 : NaN, rr = nd > 0 ? mp / nd * 100 : NaN;
+        html = `<div class="cm-res"><div class="cm-res-lbl">هزینه (Debit)</div><div class="cm-res-val" style="color:var(--tertiary)">${fStr(nd)}</div></div>
                 <div class="cm-res ${mp > 0 ? 'hi' : 'neg'}"><div class="cm-res-lbl">حداکثر سود</div><div class="cm-res-val">${fStr(mp)}</div></div>
-                <div class="cm-res"><div class="cm-res-lbl">سر به سر</div><div class="cm-res-val" style="color:var(--blue)">${fStr(be)}</div></div>
-                <div class="cm-res ${sm > 0 ? 'hi' : sm < -5 ? 'neg' : ''}"><div class="cm-res-lbl">حاشیه امنیت</div><div class="cm-res-val" style="color:${sm > 0 ? 'var(--teal)' : 'var(--rose)'}">${fPct(sm)}</div></div>
-                <div class="cm-res hi"><div class="cm-res-lbl">نسبت سود به هزینه</div><div class="cm-res-val">${fPct(rr)}</div></div>
-                <div class="cm-res neg"><div class="cm-res-lbl">حداکثر ضرر</div><div class="cm-res-val">${fStr(nd)}</div></div>`;
+                <div class="cm-res"><div class="cm-res-lbl">سر به سر</div><div class="cm-res-val" style="color:var(--primary)">${fStr(bep)}</div></div>
+                <div class="cm-res ${sm > 0 ? 'hi' : sm < -5 ? 'neg' : ''}"><div class="cm-res-lbl">حاشیه امنیت</div><div class="cm-res-val" style="color:${sm > 0 ? 'var(--secondary)' : 'var(--error)'}">${fPct(sm)}</div></div>`;
+        drawPayoffChart('bcs', {S, K1: k1, K2: k2, maxP: mp, maxL: -nd, BE: bep});
     } else if (_cmType === 'cc') {
-        const S = g('cm-S'), K = g('cm-K'), P = g('cm-P'), days = g('cm-days');
-        const mp = K - S + P, be = S - P, tpct = S > 0 ? mp / S * 100 : NaN, mpct = days > 0 ? tpct / days * 30 : NaN, spct = S > 0 ? P / S * 100 : NaN;
+        S = g('cm-S'); const K = g('cm-K'), P = g('cm-P'), days = g('cm-days');
+        const mp = K - S + P; bep = S - P; 
+        const tpct = S > 0 ? mp / S * 100 : NaN, mpct = days > 0 ? tpct / days * 30 : NaN, spct = S > 0 ? P / S * 100 : NaN;
         html = `<div class="cm-res ${mp > 0 ? 'hi' : 'neg'}"><div class="cm-res-lbl">حداکثر سود</div><div class="cm-res-val">${fStr(mp)}</div></div>
-                <div class="cm-res"><div class="cm-res-lbl">سر به سر</div><div class="cm-res-val" style="color:var(--blue)">${fStr(be)}</div></div>
-                <div class="cm-res hi"><div class="cm-res-lbl">سود کل %</div><div class="cm-res-val">${fPct(tpct)}</div></div>
+                <div class="cm-res"><div class="cm-res-lbl">سر به سر</div><div class="cm-res-val" style="color:var(--primary)">${fStr(bep)}</div></div>
                 <div class="cm-res hi"><div class="cm-res-lbl">سود ماهانه %</div><div class="cm-res-val">${fPct(mpct)}</div></div>
-                <div class="cm-res"><div class="cm-res-lbl">درصد پرمیوم</div><div class="cm-res-val" style="color:var(--amber)">${fPct(spct)}</div></div>
-                <div class="cm-res neg"><div class="cm-res-lbl">ریسک سهم</div><div class="cm-res-val">${fStr(S)}</div></div>`;
+                <div class="cm-res"><div class="cm-res-lbl">درصد پرمیوم</div><div class="cm-res-val" style="color:var(--tertiary)">${fPct(spct)}</div></div>`;
+        drawPayoffChart('cc', {S, K, maxP: mp, BE: bep});
     } else if (_cmType === 'collar') {
-        const S = g('cm-S'), Kc = g('cm-Kc'), Kp = g('cm-Kp'), Pc = g('cm-Pc'), Pp = g('cm-Pp');
-        const netP = Pc - Pp, mp = Kc - S + netP, ml = Kp - S + netP, be = S - netP;
-        const prot = S > 0 ? (S - Kp) / S * 100 : NaN, profPct = S > 0 ? mp / S * 100 : NaN, lossPct = S > 0 ? ml / S * 100 : NaN;
-        html = `<div class="cm-res"><div class="cm-res-lbl">خالص پرمیوم</div><div class="cm-res-val" style="color:${netP >= 0 ? 'var(--teal)' : 'var(--rose)'}">${netP >= 0 ? '+' : ''}${fStr(netP)}</div></div>
-                <div class="cm-res hi"><div class="cm-res-lbl">حداکثر سود</div><div class="cm-res-val">${fStr(mp)} (${fPct(profPct)})</div></div>
-                <div class="cm-res neg"><div class="cm-res-lbl">حداکثر ضرر</div><div class="cm-res-val">${fStr(ml)} (${fPct(lossPct)})</div></div>
-                <div class="cm-res"><div class="cm-res-lbl">سر به سر</div><div class="cm-res-val" style="color:var(--blue)">${fStr(be)}</div></div>
-                <div class="cm-res"><div class="cm-res-lbl">حفاظت پوت %</div><div class="cm-res-val" style="color:var(--amber)">${fPct(prot)}</div></div>
-                <div class="cm-res hi"><div class="cm-res-lbl">بازه قیمتی</div><div class="cm-res-val" style="font-size:13px">${fStr(Kp)} ← → ${fStr(Kc)}</div></div>`;
+        S = g('cm-S'); const Kc = g('cm-Kc'), Kp = g('cm-Kp'), Pc = g('cm-Pc'), Pp = g('cm-Pp');
+        const netP = Pc - Pp, mp = Kc - S + netP, ml = Kp - S + netP; bep = S - netP;
+        const prot = S > 0 ? (S - Kp) / S * 100 : NaN, profPct = S > 0 ? mp / S * 100 : NaN;
+        html = `<div class="cm-res"><div class="cm-res-lbl">خالص پرمیوم</div><div class="cm-res-val" style="color:${netP >= 0 ? 'var(--secondary)' : 'var(--error)'}">${netP >= 0 ? '+' : ''}${fStr(netP)}</div></div>
+                <div class="cm-res hi"><div class="cm-res-lbl">حداکثر سود</div><div class="cm-res-val">${fStr(mp)}</div></div>
+                <div class="cm-res neg"><div class="cm-res-lbl">حداکثر ضرر</div><div class="cm-res-val">${fStr(ml)}</div></div>
+                <div class="cm-res"><div class="cm-res-lbl">سر به سر</div><div class="cm-res-val" style="color:var(--primary)">${fStr(bep)}</div></div>`;
+        drawPayoffChart('collar', {S, Kc, Kp, maxP: mp, maxL: ml, BE: bep});
     } else if (_cmType === 'conversion') {
-        const S = g('cm-S'), K = g('cm-K'), Pc = g('cm-Pc'), Pp = g('cm-Pp'), days = g('cm-days');
+        S = g('cm-S'); const K = g('cm-K'), Pc = g('cm-Pc'), Pp = g('cm-Pp'), days = g('cm-days');
         const netCost = S + Pp - Pc, profit = K - netCost, retPct = netCost > 0 ? profit / netCost * 100 : NaN;
-        const annualPct = (days > 0 && !isNaN(retPct)) ? retPct / days * 365 : NaN, monthlyPct = (days > 0 && !isNaN(retPct)) ? retPct / days * 30 : NaN;
-        html = `<div class="cm-res"><div class="cm-res-lbl">هزینه خالص</div><div class="cm-res-val" style="color:var(--amber)">${fStr(netCost)}</div></div>
+        const annualPct = (days > 0 && !isNaN(retPct)) ? retPct / days * 365 : NaN;
+        html = `<div class="cm-res"><div class="cm-res-lbl">هزینه خالص</div><div class="cm-res-val" style="color:var(--tertiary)">${fStr(netCost)}</div></div>
                 <div class="cm-res ${profit > 0 ? 'hi' : 'neg'}"><div class="cm-res-lbl">سود قفل‌شده</div><div class="cm-res-val">${fStr(profit)}</div></div>
                 <div class="cm-res hi"><div class="cm-res-lbl">بازده کل %</div><div class="cm-res-val">${fPct(retPct)}</div></div>
-                <div class="cm-res hi"><div class="cm-res-lbl">بازده ماهانه %</div><div class="cm-res-val">${fPct(monthlyPct)}</div></div>
-                <div class="cm-res hi"><div class="cm-res-lbl">بازده سالانه %</div><div class="cm-res-val">${fPct(annualPct)}</div></div>
-                <div class="cm-res"><div class="cm-res-lbl">قیمت اعمال مشترک</div><div class="cm-res-val" style="color:var(--blue)">${fStr(K)}</div></div>`;
+                <div class="cm-res hi"><div class="cm-res-lbl">بازده سالانه %</div><div class="cm-res-val">${fPct(annualPct)}</div></div>`;
+        drawPayoffChart('conversion', {S, K, maxP: profit, BE: netCost});
     }
     res.innerHTML = html;
 }
 
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCalc(); });
+function drawPayoffChart(type, p) {
+    const svg = document.getElementById('cm-chart');
+    if (!svg) return;
+    
+    const root = document.documentElement;
+    const isDark = root.getAttribute('data-theme') === 'dark';
+    const cPrimary = isDark ? '#3f83f8' : '#1a56db';
+    const cSecondary = isDark ? '#31c48d' : '#057a55';
+    const cLine = isDark ? '#4b5563' : '#d1d5db';
+    const cText = isDark ? '#9ca3af' : '#6b7280';
+
+    const w = 400, h = 200, yZero = 120;
+    let points = [];
+
+    const scaleX = val => {
+        let min, max;
+        if(type==='bcs') { min = p.K1*0.8; max = p.K2*1.2; }
+        else if(type==='cc') { min = p.K*0.6; max = p.K*1.4; }
+        else if(type==='collar') { min = p.Kp*0.8; max = p.Kc*1.2; }
+        else { min = p.K*0.8; max = p.K*1.2; }
+        if(val <= min) return 20; if(val >= max) return w-20;
+        return 20 + ((val - min) / (max - min)) * (w - 40);
+    };
+    const scaleY = val => {
+        let maxExt = Math.max(Math.abs(p.maxP||0), Math.abs(p.maxL||0));
+        if(maxExt === 0) maxExt = 1000;
+        return yZero - (val / maxExt) * 80;
+    };
+
+    if (type === 'bcs') {
+        points = [[20, p.maxL], [p.K1, p.maxL], [p.K2, p.maxP], [w-20, p.maxP]];
+    } else if (type === 'cc') {
+        points = [[20, p.maxL||-p.S], [p.K, p.maxP], [w-20, p.maxP]];
+    } else if (type === 'collar') {
+        points = [[20, p.maxL], [p.Kp, p.maxL], [p.Kc, p.maxP], [w-20, p.maxP]];
+    } else if (type === 'conversion') {
+        points = [[20, p.maxP], [w-20, p.maxP]];
+    }
+
+    let d = `M ${points[0][0]===20?20:scaleX(points[0][0])},${scaleY(points[0][1])}`;
+    for(let i=1; i<points.length; i++) {
+        d += ` L ${points[i][0]===w-20?w-20:scaleX(points[i][0])},${scaleY(points[i][1])}`;
+    }
+
+    const sX = scaleX(p.S);
+    
+    svg.innerHTML = `
+        <line x1="20" y1="${yZero}" x2="${w-20}" y2="${yZero}" stroke="${cLine}" stroke-width="2"/>
+        <text x="20" y="${yZero-5}" fill="${cText}" font-size="10" font-family="monospace">سود/زیان 0</text>
+        <path d="${d}" fill="none" stroke="${cPrimary}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="${sX}" y1="20" x2="${sX}" y2="180" stroke="${cSecondary}" stroke-dasharray="4" stroke-width="2"/>
+        <circle cx="${sX}" cy="${yZero}" r="4" fill="${cSecondary}"/>
+        <text x="${sX}" y="15" fill="${cSecondary}" font-size="10" font-weight="bold" text-anchor="middle">قیمت فعلی</text>
+    `;
+}
 
 /* ══ BOOT APP ══ */
+function updateCircle(pct) {
+    const circle = document.getElementById('timer-path');
+    if(circle) circle.style.strokeDashoffset = 100 - pct;
+}
+
 function startCD() {
     clearInterval(cdInt); cdSec = 60;
     cdInt = setInterval(() => {
         cdSec--; 
         const el = document.getElementById('cd');
-        if(el) el.textContent = cdSec + 's';
+        if(el) el.textContent = cdSec;
+        updateCircle((cdSec/60)*100);
+        
+        const ta = document.getElementById('time-ago');
+        if(ta && window.lastUpdateTs) ta.textContent = timeAgo(window.lastUpdateTs);
+
         if (cdSec <= 0) { cdSec = 60; loadLiveData(false); }
     }, 1000);
 }
 
-function bootApp() {
-    updateLayout();
+document.addEventListener('DOMContentLoaded', () => { 
+    updateLayout(); 
     document.getElementById('dash').style.display = 'block';
-    loadLiveData(false);
-    startCD();
-}
-
-if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', bootApp); } 
-else { bootApp(); }
+    loadLiveData(false); 
+    startCD(); 
+});
