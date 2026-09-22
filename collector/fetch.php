@@ -1,7 +1,7 @@
 <?php
 // collector/fetch.php
 // توسط Cron هر دقیقه اجرا می‌شود
-// داده را از TSETMC می‌گیرد، نرمال می‌کند، و در latest.json می‌نویسد
+// داده را از TSETMC می‌گیرد، نرمال می‌کند، استراتژی‌ها را محاسبه کرده و در latest.json می‌نویسد
 
 require_once __DIR__ . '/normalize.php';
 
@@ -19,7 +19,6 @@ $logFile     = $cfg['log_dir']  . '/collector-' . date('Y-m-d') . '.log';
 // ═══ قفل: جلوگیری از اجرای همزمان ═══
 $lock = fopen($lockFile, 'c');
 if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) {
-    // اجرای قبلی هنوز تمام نشده — بی‌صدا خارج شو
     exit(0);
 }
 
@@ -45,7 +44,11 @@ try {
         throw new Exception('Too few rows: ' . count($rows) . ' — stats: ' . json_encode($stats, JSON_UNESCAPED_UNICODE));
     }
 
-    // ─── ۵. نوشتن atomic ───
+    // ─── ۵. محاسبه استراتژی‌ها در سرور ───
+    require_once __DIR__ . '/strategies.php';
+    $strategies = calculateStrategies($rows);
+
+    // ─── ۶. نوشتن atomic ───
     $now = time();
     $payload = [
         'meta' => [
@@ -55,9 +58,9 @@ try {
             'rows'       => count($rows),
             'stats'      => $stats,
         ],
-        'data' => $rows,
+        'data' => $strategies
     ];
-
+    
     writeAtomic($latestFile, json_encode($payload, JSON_UNESCAPED_UNICODE));
 
     writeAtomic($statusFile, json_encode([
@@ -71,7 +74,7 @@ try {
     $logEntry['stats']  = $stats;
 
 } catch (Exception $e) {
-    // ─── خطا: latest.json را دست نزن (Dashboard از داده قدیمی استفاده می‌کند) ───
+    // ─── خطا: latest.json را دست نزن ───
     $prev = @json_decode(@file_get_contents($statusFile), true) ?: [];
 
     writeAtomic($statusFile, json_encode([
