@@ -3,15 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Options Dashboard - TSE</title>
-<link rel="stylesheet" href="assets/style.css?v=5.0">
-<script src="assets/app.js?v=5.0" defer></script>
+<title>ترمینال اختیار معامله بورس تهران</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css?v=6.0">
+<script src="assets/app.js?v=6.0" defer></script>
 </head>
 <body>
 
 <div id="loader-overlay" class="loader-overlay">
     <div class="spinner"></div>
-    <div style="margin-top: 16px; color: var(--teal); font-weight: 700;">در حال دریافت داده‌های زنده...</div>
+    <div style="margin-top: 16px; color: var(--teal); font-weight: 700; font-size: 14px;">در حال بارگذاری داده‌های مشتقه...</div>
 </div>
 
 <div class="bg-mesh"><div class="bg-blob"></div></div>
@@ -22,22 +25,21 @@
             <div class="hbrand">
                 <div class="hlogo">📈</div>
                 <div>
-                    <div class="htitle">TSE Options Terminal <span class="htitle-badge">LIVE</span></div>
+                    <div class="htitle">ترمینال اختیار معامله بورس تهران <span class="htitle-badge">LIVE</span></div>
                     <div class="hsub" id="live-status">در حال اتصال...</div>
                 </div>
             </div>
             <div class="hctrl">
-                <div class="hinfo" style="text-align: left; line-height: 1.3;">
-                    <span id="time-ago" style="font-weight:700; color:var(--teal);">همین الان</span><br>
-                    <span id="lupd" style="font-size:9px; color:var(--dim);">—</span>
+                <div class="hinfo" style="text-align: left; line-height: 1.4;">
+                    <span id="time-ago" style="font-weight:700; color:var(--teal); font-size:12px;">همین الان</span><br>
+                    <span id="lupd" class="persian-num" style="font-size:11px; color:var(--dim);">—</span>
                 </div>
-                <!-- Circular Timer -->
                 <div class="circular-timer">
                     <svg class="timer-svg" viewBox="0 0 36 36">
                         <path class="timer-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                         <path class="timer-path" id="timer-path" stroke-dasharray="100, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                     </svg>
-                    <div class="timer-text" id="cd">60</div>
+                    <div class="timer-text persian-num" id="cd">۶۰</div>
                 </div>
                 <button class="btn-sm" id="btn-refresh" onclick="manRefresh()">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
@@ -51,10 +53,11 @@
             </div>
         </div>
         <div class="hdr-tabs">
-            <button class="htab active" data-tab="bcs" onclick="switchTab('bcs')">📈 Bull Call Spread <span class="tab-badge" id="tab-badge-bcs">0</span></button>
-            <button class="htab" data-tab="cc" onclick="switchTab('cc')">🛡️ Covered Call <span class="tab-badge" id="tab-badge-cc">0</span></button>
-            <button class="htab" data-tab="collar" onclick="switchTab('collar')">🔒 Collar <span class="tab-badge" id="tab-badge-collar">0</span></button>
-            <button class="htab" data-tab="conversion" onclick="switchTab('conversion')">🔄 Conversion <span class="tab-badge" id="tab-badge-conversion">0</span></button>
+            <button class="htab active" data-tab="bcs" onclick="switchTab('bcs')">📈 Bull Call Spread <span class="tab-badge persian-num" id="tab-badge-bcs">۰</span></button>
+            <button class="htab" data-tab="cc" onclick="switchTab('cc')">🛡️ Covered Call <span class="tab-badge persian-num" id="tab-badge-cc">۰</span></button>
+            <button class="htab" data-tab="collar" onclick="switchTab('collar')">🔒 Collar <span class="tab-badge persian-num" id="tab-badge-collar">۰</span></button>
+            <button class="htab" data-tab="conversion" onclick="switchTab('conversion')">🔄 Conversion <span class="tab-badge persian-num" id="tab-badge-conversion">۰</span></button>
+            <button class="htab" data-tab="edu" onclick="switchTab('edu')">📚 آموزش</button>
         </div>
     </div>
 
@@ -62,19 +65,12 @@
     <div id="page-bcs" class="page-content active">
         <div class="main">
             <div class="alert" id="alrt"></div>
-            <!-- Top Golden Contracts Showcase -->
-            <div class="gold-showcase" id="bcs-gold-showcase" style="display:none;">
-                <div class="gold-header">
-                    <span>⭐ قراردادهای طلایی برگزیده (الگوریتم آلفا)</span>
-                    <span class="gold-count" id="bcs-gold">0</span>
-                </div>
-            </div>
 
             <div class="sgrid">
-                <div class="sc teal"><div class="sc-icon">🎯</div><div class="sc-label">کل استراتژی‌ها</div><div class="sc-value" id="bcs-st">0</div></div>
-                <div class="sc blue"><div class="sc-icon">📊</div><div class="sc-label">میانگین بازدهی</div><div class="sc-value" id="bcs-avg-ret">0%</div></div>
-                <div class="sc amber"><div class="sc-icon">📌</div><div class="sc-label">نماد پایه</div><div class="sc-value" id="bcs-su">0</div></div>
-                <div class="sc purple"><div class="sc-icon">📅</div><div class="sc-label">سررسید</div><div class="sc-value" id="bcs-se">0</div></div>
+                <div class="sc teal"><div class="sc-icon">🎯</div><div class="sc-label">کل استراتژی‌ها</div><div class="sc-value persian-num" id="bcs-st">۰</div></div>
+                <div class="sc blue"><div class="sc-icon">⭐</div><div class="sc-label">قراردادهای طلایی</div><div class="sc-value persian-num" id="bcs-gold">۰</div></div>
+                <div class="sc amber"><div class="sc-icon">📌</div><div class="sc-label">نماد پایه</div><div class="sc-value persian-num" id="bcs-su">۰</div></div>
+                <div class="sc purple"><div class="sc-icon">📅</div><div class="sc-label">سررسید</div><div class="sc-value persian-num" id="bcs-se">۰</div></div>
             </div>
 
             <div class="fbar">
@@ -82,7 +78,7 @@
                 <div class="fdivider"></div>
                 <div class="fgroup"><span class="fbar-label">سررسید:</span><select id="fe" onchange="render()"><option value="">همه</option></select></div>
                 <div class="fdivider"></div>
-                <div class="fgroup"><span class="fbar-label">ارزش (میلیارد ریال):</span><input type="number" id="fvol" step="1" min="0" placeholder="اختیاری" style="width:80px" oninput="render()"></div>
+                <div class="fgroup"><span class="fbar-label">ارزش (میلیارد ریال):</span><input type="number" id="fvol" step="1" min="0" placeholder="اختیاری" style="width:100px" oninput="render()"></div>
                 <div class="fdivider"></div>
                 <div class="fgroup"><span class="fbar-label">مرتب‌سازی:</span>
                 <select id="fs" onchange="render()">
@@ -100,16 +96,16 @@
                 <div class="gfp-head" onclick="toggleGFP('bcs')">
                     <div class="gfp-head-l">
                         <span style="font-size:22px">⚙️</span>
-                        <div><div class="gfp-htitle">تنظیمات فیلتر طلایی (Alpha Scanner)</div><div class="gfp-hdesc">غربالگری بر اساس استراتژی مدیریت ریسک شخصی</div></div>
+                        <div><div class="gfp-htitle">تنظیمات فیلتر طلایی (Alpha Scanner)</div><div class="gfp-hdesc">غربالگری بر اساس پارامترهای سودآوری و پوشش ریسک</div></div>
                     </div>
-                    <button class="gfp-toggle"><span id="gfp-bcs-arrow">▼</span> نمایش تنظیمات</button>
+                    <button class="gfp-toggle"><span id="gfp-bcs-arrow">▼</span> <span id="gfp-bcs-lbl">نمایش تنظیمات</span></button>
                 </div>
                 <div class="gfp-body collapsed" id="gfp-bcs-body">
                     <div class="gfp-sep"></div>
                     <div class="gfp-row">
-                        <div class="gff"><label>حداقل حاشیه امنیت %</label><input type="number" id="gf-safety" value="5" step="0.5" oninput="render()"></div>
-                        <div class="gff"><label>حداقل پایین‌ترین سود %</label><input type="number" id="gf-worst" value="10" step="0.5" oninput="render()"></div>
-                        <div class="gff"><label>حداقل سود %</label><input type="number" id="gf-ret" value="10" step="0.5" oninput="render()"></div>
+                        <div class="gff"><label>حداقل حاشیه امنیت %</label><input type="number" id="gf-safety" value="5" step="0.5" placeholder="اختیاری" oninput="render()"></div>
+                        <div class="gff"><label>حداقل پایین‌ترین سود %</label><input type="number" id="gf-worst" value="10" step="0.5" placeholder="اختیاری" oninput="render()"></div>
+                        <div class="gff"><label>حداقل سود %</label><input type="number" id="gf-ret" value="10" step="0.5" placeholder="اختیاری" oninput="render()"></div>
                         <div class="gff"><label>وضعیت K₁</label>
                             <select id="gf-status" onchange="render()"><option value="">همه</option><option value="OTM">OTM</option><option value="ATM">ATM</option><option value="ITM">ITM</option></select>
                         </div>
@@ -118,19 +114,62 @@
             </div>
 
             <div class="twrap">
-                <div class="thdr"><span class="ttitle">ماتریس اسپرد صعودی خرید (BCS)</span><span class="tcnt" id="tcnt">—</span></div>
+                <div class="thdr"><span class="ttitle">ماتریس اسپرد صعودی خرید (Bull Call Spread)</span><span class="tcnt persian-num" id="tcnt">—</span></div>
                 <div class="tscroll">
                     <table>
                         <thead><tr>
                             <th style="width: 40px">عملیات</th><th style="width: 30px">#</th><th class="sticky-col">نماد پایه</th><th>سررسید</th><th>روز</th><th>قیمت سهم</th>
                             <th>اعمال پایین K₁</th><th>اعمال بالا K₂</th><th>پرمیوم پایین</th><th>پرمیوم بالا</th>
                             <th>سر به سر</th>
-                            <th style="width:120px">حاشیه امنیت %</th>
-                            <th style="width:120px">بالاترین سود % (ROI)</th>
+                            <th style="width:130px">حاشیه امنیت %</th>
+                            <th>پایین‌ترین سود %</th>
+                            <th>سود (آخرین) %</th>
+                            <th>بالاترین سود %</th>
                             <th>وضعیت K₁</th><th>ارزش K₁</th><th>ارزش K₂</th>
                         </tr></thead>
                         <tbody id="tb"></tbody>
                     </table>
+                </div>
+            </div>
+
+            <!-- محاسبه‌گر دستی و آفست BCS به عنوان ابزار تحلیلی درون‌صفحه‌ای -->
+            <div class="calc-panel-card">
+                <div class="calc-panel-hdr" onclick="toggleLocalCalc('local-bcs')">
+                    <div class="cb-hl"><span style="font-size:18px">🧮</span><span class="cb-title">محاسبه‌گر دستی و آفست پوزیشن Bull Call Spread</span><span class="cb-pill">محاسبه آنی</span></div>
+                    <button class="cb-btn"><span id="local-bcs-arr">▼</span> <span id="local-bcs-lbl">باز کردن پنل</span></button>
+                </div>
+                <div class="cb-body collapsed" id="local-bcs-body">
+                    <div class="calc-inputs">
+                        <div class="cf"><label>قیمت کال پایین <span>P₁</span></label><input type="number" id="ci-p1" placeholder="پریمیوم" min="0" oninput="calcManual()"></div>
+                        <div class="cf"><label>قیمت اعمال پایین <span>K₁</span></label><input type="number" id="ci-k1" placeholder="استرایک" min="0" oninput="calcManual()"></div>
+                        <div class="cf"><label>قیمت کال بالا <span>P₂</span></label><input type="number" id="ci-p2" placeholder="پریمیوم" min="0" oninput="calcManual()"></div>
+                        <div class="cf"><label>قیمت اعمال بالا <span>K₂</span></label><input type="number" id="ci-k2" placeholder="استرایک" min="0" oninput="calcManual()"></div>
+                        <div class="cf"><label>قیمت سهم پایه <span>S</span></label><input type="number" id="ci-s" placeholder="اختیاری" min="0" oninput="calcManual()"></div>
+                    </div>
+                    <div class="calc-sep-row"><span class="calc-sep-row-label">📍 پارامترهای ورود اولیه پوزیشن (برای محاسبه آفست و خروج)</span></div>
+                    <div class="calc-entry-grid">
+                        <div class="cf entry"><label>قیمت خرید کال پایین در زمان ورود <span>open P₁</span></label><input type="number" id="ci-ep1" placeholder="قیمت خرید قبلی" min="0" oninput="calcManual()"></div>
+                        <div class="cf entry"><label>قیمت فروش کال بالا در زمان ورود <span>open P₂</span></label><input type="number" id="ci-ep2" placeholder="قیمت فروش قبلی" min="0" oninput="calcManual()"></div>
+                    </div>
+                    <div class="calc-err" id="calc-err"></div>
+                    <div class="calc-outputs">
+                        <div class="co"><div class="co-lbl">Net Debit<br>هزینه خالص</div><div class="co-val v-amber" id="co-debit">—</div></div>
+                        <div class="co"><div class="co-lbl">Max Profit<br>حداکثر سود</div><div class="co-val v-teal" id="co-profit">—</div></div>
+                        <div class="co"><div class="co-lbl">Max Loss<br>حداکثر زیان</div><div class="co-val v-rose" id="co-loss">—</div></div>
+                        <div class="co"><div class="co-lbl">R/R Ratio<br>نسبت ریسک</div><div class="co-val v-blue" id="co-rr">—</div></div>
+                        <div class="co hi-teal"><div class="co-lbl">Return %<br>درصد سود</div><div class="co-val" id="co-ret">—</div></div>
+                        <div class="co hi-amber"><div class="co-lbl">Breakeven<br>سر به سر</div><div class="co-val" id="co-be">—</div></div>
+                        <div class="co"><div class="co-lbl">Safety %<br>حاشیه امنیت</div><div class="co-val v-purple" id="co-safety">—</div></div>
+                    </div>
+                    <div class="pos-section" id="pos-section">
+                        <div class="pos-hdr">📊 وضعیت تحقق سود / بستن زودهنگام (آفست)</div>
+                        <div class="pos-outputs">
+                            <div class="co"><div class="co-lbl">Return% زمان ورود</div><div class="co-val" id="co-open-ret">—</div></div>
+                            <div class="co"><div class="co-lbl">سود / زیان نقدی جاری</div><div class="co-val" id="co-pnl">—</div></div>
+                            <div class="co hi-teal"><div class="co-lbl">بازدهی در صورت آفست</div><div class="co-val" id="co-now-ret">—</div></div>
+                            <div class="co hi-amber"><div class="co-lbl">درصد تحقق سود سقف</div><div class="co-val" id="co-coverage">—</div></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -140,8 +179,8 @@
     <div id="page-cc" class="page-content">
         <div class="main">
             <div class="sgrid">
-                <div class="sc teal"><div class="sc-icon">🛡️</div><div class="sc-label">کل فرصت‌ها</div><div class="sc-value" id="cc-st">0</div></div>
-                <div class="sc blue"><div class="sc-icon">⭐</div><div class="sc-label">فرصت طلایی</div><div class="sc-value" id="cc-gold">0</div></div>
+                <div class="sc teal"><div class="sc-icon">🛡️</div><div class="sc-label">کل فرصت‌ها</div><div class="sc-value persian-num" id="cc-st">۰</div></div>
+                <div class="sc blue"><div class="sc-icon">⭐</div><div class="sc-label">فرصت طلایی</div><div class="sc-value persian-num" id="cc-gold">۰</div></div>
                 <div class="sc amber"><div class="sc-icon">📅</div><div class="sc-label">بالاترین سود ماهانه</div><div class="sc-value" id="cc-sb">—</div></div>
                 <div class="sc purple"><div class="sc-icon">🔒</div><div class="sc-label">بالاترین حاشیه امنیت</div><div class="sc-value" id="cc-sa">—</div></div>
             </div>
@@ -160,7 +199,7 @@
             <div class="gfp">
                 <div class="gfp-head" onclick="toggleGFP('cc')">
                     <div class="gfp-head-l"><span style="font-size:22px">⚙️</span><div><div class="gfp-htitle">تنظیمات فیلتر طلایی — Covered Call</div></div></div>
-                    <button class="gfp-toggle"><span id="gfp-cc-arrow">▼</span> نمایش تنظیمات</button>
+                    <button class="gfp-toggle"><span id="gfp-cc-arrow">▼</span> <span id="gfp-cc-lbl">نمایش تنظیمات</span></button>
                 </div>
                 <div class="gfp-body collapsed" id="gfp-cc-body">
                     <div class="gfp-sep"></div>
@@ -173,16 +212,43 @@
             </div>
 
             <div class="twrap">
-                <div class="thdr"><span class="ttitle">ماتریس فروش پوشش‌دار (Covered Call)</span><span class="tcnt" id="cc-tcnt">—</span></div>
+                <div class="thdr"><span class="ttitle">ماتریس فروش پوشش‌دار (Covered Call)</span><span class="tcnt persian-num" id="cc-tcnt">—</span></div>
                 <div class="tscroll">
                     <table>
                         <thead><tr>
-                            <th>عملیات</th><th>#</th><th>نماد</th><th class="sticky-col">نماد پایه</th><th>سررسید</th><th>روز</th>
+                            <th style="width: 40px">عملیات</th><th style="width: 30px">#</th><th>نماد قرارداد</th><th class="sticky-col">نماد پایه</th><th>سررسید</th><th>روز</th>
                             <th>قیمت سهم S</th><th>قیمت اعمال K</th><th>پریمیوم P</th><th>ارزش معامله</th>
-                            <th>سود کل %</th><th style="width:120px">سود ماهانه %</th><th style="width:120px">حاشیه امنیت %</th><th>شروع سود</th><th>وضعیت</th>
+                            <th>سود کل %</th><th style="width:130px">سود ماهانه %</th><th style="width:130px">حاشیه امنیت %</th><th>شروع سود سقف</th><th>وضعیت</th>
                         </tr></thead>
                         <tbody id="cc-tb"></tbody>
                     </table>
+                </div>
+            </div>
+
+            <!-- محاسبه‌گر آفست کاوردکال درون صفحه -->
+            <div class="calc-panel-card">
+                <div class="calc-panel-hdr" onclick="toggleLocalCalc('local-cc')">
+                    <div class="cb-hl"><span style="font-size:18px">🛡️</span><span class="cb-title">محاسبه‌گر تسویه و آفست کاوردکال (Covered Call Offset)</span><span class="cb-pill amber">محاسبه آنی</span></div>
+                    <button class="cb-btn"><span id="local-cc-arr">▼</span> <span id="local-cc-lbl">باز کردن پنل</span></button>
+                </div>
+                <div class="cb-body collapsed" id="local-cc-body">
+                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px">
+                        <div class="cf cc-in"><label>قیمت خرید اولیه سهم <span>S₀</span></label><input type="number" id="cco-s0" placeholder="قیمت خرید سهم" min="0" oninput="calcCCOffset()"></div>
+                        <div class="cf cc-in"><label>قیمت سهم الان <span>S</span></label><input type="number" id="cco-snow" placeholder="قیمت فعلی سهم" min="0" oninput="calcCCOffset()"></div>
+                        <div class="cf cc-in"><label>قیمت فروش کال در ابتدا <span>P_sold</span></label><input type="number" id="cco-psold" placeholder="پریمیوم دریافتی" min="0" oninput="calcCCOffset()"></div>
+                        <div class="cf cc-in"><label>قیمت کال در حال حاضر <span>P</span></label><input type="number" id="cco-pnow" placeholder="پریمیوم فعلی" min="0" oninput="calcCCOffset()"></div>
+                    </div>
+                    <div class="calc-err" id="cco-err"></div>
+                    <div class="cco-outputs">
+                        <div class="co"><div class="co-lbl">سود انتظاری اولیه<br>در سررسید</div><div class="co-val v-blue" id="cco-orig">—</div></div>
+                        <div class="co hi-teal"><div class="co-lbl">بازدهی آفست<br>در قیمت جاری</div><div class="co-val" id="cco-now">—</div></div>
+                        <div class="co hi-amber"><div class="co-lbl">درصد تحقق سود<br>استراتژی</div><div class="co-val" id="cco-cov">—</div></div>
+                    </div>
+                    <div class="cco-breakdown" id="cco-bd">
+                        <span>سود/زیان سهم: <span id="cco-s-pnl" style="font-weight:700">—</span></span>
+                        <span>سود/زیان آپشن: <span id="cco-o-pnl" style="font-weight:700">—</span></span>
+                        <span>مجموع P&amp;L نقدی: <span id="cco-t-pnl" style="font-weight:700">—</span></span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -192,10 +258,10 @@
     <div id="page-collar" class="page-content">
         <div class="main">
             <div class="sgrid">
-                <div class="sc teal"><div class="sc-icon">🔒</div><div class="sc-label">کل ترکیب‌ها</div><div class="sc-value" id="col-st">0</div></div>
-                <div class="sc blue"><div class="sc-icon">📈</div><div class="sc-label">ترکیب طلایی</div><div class="sc-value" id="col-gold">0</div></div>
-                <div class="sc amber"><div class="sc-icon">🛡️</div><div class="sc-label">بهترین سود %</div><div class="sc-value" id="col-sbp">—</div></div>
-                <div class="sc purple"><div class="sc-icon">📌</div><div class="sc-label">کمترین ضرر %</div><div class="sc-value" id="col-sbl">—</div></div>
+                <div class="sc teal"><div class="sc-icon">🔒</div><div class="sc-label">کل ترکیب‌ها</div><div class="sc-value persian-num" id="col-st">۰</div></div>
+                <div class="sc blue"><div class="sc-icon">⭐</div><div class="sc-label">ترکیب طلایی</div><div class="sc-value persian-num" id="col-gold">۰</div></div>
+                <div class="sc amber"><div class="sc-icon">📈</div><div class="sc-label">بهترین سود %</div><div class="sc-value" id="col-sbp">—</div></div>
+                <div class="sc purple"><div class="sc-icon">🛡️</div><div class="sc-label">کمترین ضرر %</div><div class="sc-value" id="col-sbl">—</div></div>
             </div>
             <div class="fbar">
                 <div class="fgroup"><span class="fbar-label">نماد پایه:</span><select id="col-fu" onchange="renderCollar()"><option value="">همه</option></select></div>
@@ -212,7 +278,7 @@
             <div class="gfp">
                 <div class="gfp-head" onclick="toggleGFP('col')">
                     <div class="gfp-head-l"><span style="font-size:22px">⚙️</span><div><div class="gfp-htitle">تنظیمات فیلتر طلایی — Collar</div></div></div>
-                    <button class="gfp-toggle"><span id="gfp-col-arrow">▼</span> نمایش تنظیمات</button>
+                    <button class="gfp-toggle"><span id="gfp-col-arrow">▼</span> <span id="gfp-col-lbl">نمایش تنظیمات</span></button>
                 </div>
                 <div class="gfp-body collapsed" id="gfp-col-body">
                     <div class="gfp-sep"></div>
@@ -223,16 +289,16 @@
                 </div>
             </div>
             <div class="twrap">
-                <div class="thdr"><span class="ttitle">ماتریس حلقه محافظتی (Collar)</span><span class="tcnt" id="col-tcnt">—</span></div>
+                <div class="thdr"><span class="ttitle">ماتریس حلقه محافظتی (Collar)</span><span class="tcnt persian-num" id="col-tcnt">—</span></div>
                 <div class="tscroll">
                     <table>
                         <thead><tr>
-                            <th>عملیات</th><th>#</th><th class="sticky-col">نماد پایه</th><th>نماد کال</th><th>نماد پوت</th>
-                            <th>سررسید</th><th>روز</th><th>S</th>
+                            <th style="width: 40px">عملیات</th><th style="width: 30px">#</th><th class="sticky-col">نماد پایه</th><th>نماد کال</th><th>نماد پوت</th>
+                            <th>سررسید</th><th>روز</th><th>قیمت سهم</th>
                             <th>K پوت</th><th>K کال</th>
                             <th style="color:var(--rose)">P پوت</th><th style="color:var(--teal)">P کال</th>
                             <th>خالص پرمیوم</th>
-                            <th style="width:120px">حداکثر سود %</th><th style="width:120px">حداکثر ضرر %</th>
+                            <th style="width:130px">حداکثر سود %</th><th style="width:130px">حداکثر ضرر %</th>
                             <th>سر به سر</th><th>ارزش معاملات</th>
                         </tr></thead>
                         <tbody id="col-tb"></tbody>
@@ -246,13 +312,13 @@
     <div id="page-conversion" class="page-content">
         <div class="main">
             <div class="sgrid">
-                <div class="sc teal"><div class="sc-icon">🔄</div><div class="sc-label">کل ترکیب‌ها</div><div class="sc-value" id="cv-st">0</div></div>
+                <div class="sc teal"><div class="sc-icon">🔄</div><div class="sc-label">کل ترکیب‌ها</div><div class="sc-value persian-num" id="cv-st">۰</div></div>
                 <div class="sc blue"><div class="sc-icon">📈</div><div class="sc-label">بهترین بازده سالانه</div><div class="sc-value" id="cv-sbr">—</div></div>
-                <div class="sc amber"><div class="sc-icon">📅</div><div class="sc-label">میانگین روز تا سررسید</div><div class="sc-value" id="cv-savg">—</div></div>
-                <div class="sc purple"><div class="sc-icon">🏷️</div><div class="sc-label">نماد پایه</div><div class="sc-value" id="cv-su">0</div></div>
+                <div class="sc amber"><div class="sc-icon">📅</div><div class="sc-label">میانگین روز تا سررسید</div><div class="sc-value persian-num" id="cv-savg">—</div></div>
+                <div class="sc purple"><div class="sc-icon">🏷️</div><div class="sc-label">نماد پایه</div><div class="sc-value persian-num" id="cv-su">۰</div></div>
             </div>
-            <div class="alert" style="background:var(--ld);border:1px solid var(--lb);color:var(--blue);padding:12px;border-radius:10px;font-size:12px;display:block">
-                ℹ️ <strong>استراتژی آربیتراژ Conversion:</strong> خرید سهم + خرید پوت + فروش کال روی یک قیمت اعمال مشترک. ارزش پوزیشن در سررسید دقیقاً معادل K است (سود بدون ریسک). بازده سالانه را با نرخ اوراق مقایسه کنید.
+            <div class="alert" style="background:var(--ld);border:1px solid var(--lb);color:var(--blue);padding:14px;border-radius:10px;font-size:12.5px;display:block">
+                ℹ️ <strong>استراتژی آربیتراژ Conversion:</strong> خرید سهم + خرید پوت + فروش کال روی یک قیمت اعمال مشترک. ارزش تضمین‌شده پوزیشن در تاریخ سررسید دقیقاً معادل استرایک (K) است. این بازدهی بدون ریسک جهت‌دار بازار بوده و با نرخ اوراق مقایسه می‌شود.
             </div>
             <div class="fbar">
                 <div class="fgroup"><span class="fbar-label">نماد پایه:</span><select id="cv-fu" onchange="renderConversion()"><option value="">همه</option></select></div>
@@ -265,12 +331,12 @@
                 </select></div>
             </div>
             <div class="twrap">
-                <div class="thdr"><div class="ttitle">ماتریس آربیتراژ کانورژن (Conversion)</div><div class="tcnt" id="cv-tcnt">—</div></div>
+                <div class="thdr"><div class="ttitle">ماتریس آربیتراژ کانورژن (Conversion)</div><div class="tcnt persian-num" id="cv-tcnt">—</div></div>
                 <div class="tscroll">
                     <table>
                         <thead><tr>
-                            <th>عملیات</th><th>#</th><th class="sticky-col">نماد پایه</th><th>نماد کال</th><th>نماد پوت</th><th>سررسید</th><th>روز</th>
-                            <th>S</th><th>K مشترک</th>
+                            <th style="width: 40px">عملیات</th><th style="width: 30px">#</th><th class="sticky-col">نماد پایه</th><th>نماد کال</th><th>نماد پوت</th><th>سررسید</th><th>روز</th>
+                            <th>قیمت سهم</th><th>K مشترک</th>
                             <th>هزینه خالص</th><th>بازده ماهانه %</th><th style="width:140px">بازده کل % (سالانه)</th>
                         </tr></thead>
                         <tbody id="cv-tb"></tbody>
@@ -279,24 +345,83 @@
             </div>
         </div>
     </div>
+
+    <!-- PAGE: Education (آموزش) -->
+    <div id="page-edu" class="page-content">
+        <div class="main">
+            <section class="full-section edu-section">
+                <div class="edu-inner">
+                    <div class="edu-text">
+                        <div class="edu-tag">استراتژی ۰۱</div>
+                        <div class="edu-title">Covered Call</div>
+                        <span class="edu-title-fa">فروش پوشش‌دار اختیار خرید</span>
+                        <p class="edu-desc">زمانی اتخاذ می‌شود که مالک سهام پایه هستید و انتظار ثبات یا رشد ناچیز در قیمت سهم را دارید. با فروش اختیار خرید (کال) خارج از سود یا در سود، بلافاصله جریان نقدی پرمیوم دریافت می‌کنید که به عنوان حاشیه امن در برابر نزول قیمت عمل می‌کند.</p>
+                        <div class="edu-stats">
+                            <div class="edu-stat"><span>ریسک نهایی</span><strong>کاهش شدید قیمت سهم پایه</strong></div>
+                            <div class="edu-stat"><span>حداکثر بازدهی</span><strong>استرایک + پرمیوم − قیمت خرید سهم</strong></div>
+                            <div class="edu-stat"><span>نقطه سر به سر</span><strong>قیمت خرید سهم − پرمیوم دریافتی</strong></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <section class="full-section edu-section" style="margin-top:20px; border-top: 1px solid var(--bd); padding-top: 30px;">
+                <div class="edu-inner">
+                    <div class="edu-text">
+                        <div class="edu-tag" style="color:var(--primary);background:var(--primary-bg);border-color:var(--lb)">استراتژی ۰۲</div>
+                        <div class="edu-title">Bull Call Spread</div>
+                        <span class="edu-title-fa">اسپرد صعودی اختیار خرید</span>
+                        <p class="edu-desc">خرید کال در استرایک پایین (K₁) و فروش همزمان کال در استرایک بالا (K₂) با سررسید یکسان. این استراتژی ریسک سوخت‌شدن کامل پرمیوم را از طریق پرمیوم دریافتی پای دوم تا حد زیادی تعدیل می‌کند و برای رشدهای با شیب معتدل طراحی شده است.</p>
+                        <div class="edu-stats">
+                            <div class="edu-stat"><span>هزینه ورود (حداکثر زیان)</span><strong>پرمیوم پرداختی P₁ − پرمیوم دریافتی P₂</strong></div>
+                            <div class="edu-stat"><span>سقف سود ممکن</span><strong>فاصله استرایک‌ها (K₂ − K₁) − هزینه خالص</strong></div>
+                            <div class="edu-stat"><span>نقطه سر به سر</span><strong>استرایک پایین K₁ + هزینه خالص ورود</strong></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="full-section edu-section" style="margin-top:20px; border-top: 1px solid var(--bd); padding-top: 30px;">
+                <div class="edu-inner">
+                    <div class="edu-text">
+                        <div class="edu-tag" style="color:var(--purple);background:rgba(113,40,201,0.1);border-color:rgba(113,40,201,0.3)">استراتژی ۰۳</div>
+                        <div class="edu-title">Collar</div>
+                        <span class="edu-title-fa">حلقه پوشش ریسک سهامداری</span>
+                        <p class="edu-desc">ترکیب مالکیت سهام + خرید پوت (بیمه کف قیمت) + فروش کال (تامین بودجه خرید بیمه). با این استراتژی هم کف افت دارایی فریز می‌شود و هم سقف رشد، ایده‌آل برای نگهداری سهام در دوره‌های افزایش ابهام در بازار.</p>
+                        <div class="edu-stats">
+                            <div class="edu-stat"><span>خالص جریان نقد پرمیوم</span><strong>پرمیوم کال دریافتی − پرمیوم پوت پرداختی</strong></div>
+                            <div class="edu-stat"><span>کف قطعی ضرر</span><strong>استرایک پوت − قیمت سهم + خالص پرمیوم</strong></div>
+                            <div class="edu-stat"><span>سقف بازدهی</span><strong>استرایک کال − قیمت سهم + خالص پرمیوم</strong></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
 </div>
 
-<!-- ══ CALC SIDE DRAWER (تغییر از Modal به Drawer) ══ -->
+<!-- ══ CALC SIDE DRAWER ══ -->
 <div id="cm-overlay" class="drawer-overlay" onclick="if(event.target===this)closeCalc()">
     <div class="drawer-box" onclick="event.stopPropagation()">
         <div class="cm-hdr">
-            <div><div class="cm-title" id="cm-title">🧮 شبیه‌ساز</div><div class="cm-subtitle" id="cm-subtitle"></div></div>
+            <div><div class="cm-title" id="cm-title">🧮 شبیه‌ساز حرفه‌ای پوزیشن</div><div class="cm-subtitle" id="cm-subtitle"></div></div>
             <button class="cm-close" onclick="closeCalc()">✕</button>
         </div>
         
-        <!-- Payoff Chart Area -->
-        <div class="payoff-chart-container" id="cm-chart-container">
-            <svg id="cm-chart" viewBox="0 0 400 200" preserveAspectRatio="none"></svg>
+<!-- Payoff Chart Area Refactored to match Recharts bR -->
+        <div class="chart-card-wrapper">
+            <div class="chart-header-row">
+                <span class="chart-title-text">نمودار سود و زیان در سررسید</span>
+                <span class="chart-info-icon" title="نمایش گرافیکی برآیند استراتژی در سررسید">ⓘ</span>
+            </div>
+            <div class="payoff-chart-container">
+                <svg id="cm-chart" viewBox="0 0 600 280"></svg>
+            </div>
         </div>
 
-        <div class="cm-section-label">ورودی‌های محاسباتی</div>
+        <div class="cm-section-label">پارامترهای متغیر ورودی</div>
         <div class="cm-grid" id="cm-inputs"></div>
-        <div class="cm-section-label">خروجی استراتژی در سررسید</div>
+        <div class="cm-section-label">برآیند مالی استراتژی</div>
         <div class="cm-results" id="cm-results"></div>
     </div>
 </div>
