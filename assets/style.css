@@ -85,7 +85,7 @@ body {
 
 /* پس‌زمینه */
 .bg-mesh{position:fixed;inset:-10%;z-index:0;pointer-events:none;overflow:hidden}
-.bg-mesh::before,.bg-mesh::after{position:absolute;border-radius:50%;filter:blur(80px);opacity:.25;will-change:transform}
+.bg-mesh::before,.bg-mesh::after,.bg-blob{position:absolute;border-radius:50%;filter:blur(80px);opacity:.25;will-change:transform}
 .bg-mesh::before{content:'';width:45vw;height:45vw;top:-10%;right:-5%;background:radial-gradient(circle,rgba(4,120,87,.4),transparent 70%)}
 .bg-mesh::after{content:'';width:40vw;height:40vw;bottom:-10%;left:-5%;background:radial-gradient(circle,rgba(29,78,216,.35),transparent 70%)}
 
@@ -134,7 +134,7 @@ body {
 .main { padding: 22px 24px; max-width: 1600px; margin: 0 auto; }
 .alert { background: var(--error-bg); border: 1px solid var(--rb); border-right: 4px solid var(--error); color: var(--error); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 13.5px; font-weight: 600; display: none; }
 
-/* ══ کارت‌های آماری (سایز متون ارتقا یافته) ══ */
+/* ══ کارت‌های آماری ══ */
 .sgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 18px; }
 .sc { background: var(--bg-card); border: 1px solid var(--bd); border-radius: 10px; padding: 18px 20px; position: relative; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
 .sc::before { content: ''; position: absolute; top: 0; right: 0; width: 100%; height: 4px; }
@@ -146,14 +146,38 @@ body {
 .sc-label { font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 4px; }
 .sc-value { font-size: 30px; font-weight: 800; line-height: 1.1; color: var(--text); }
 
+/* ══ استایل سراسری فیلدها و اینپوت‌ها ══ */
+select, 
+input,
+input[type="text"], 
+input[type="number"] { 
+    background: var(--surface-low) !important; 
+    border: 1px solid var(--bd) !important; 
+    color: var(--text) !important; 
+    padding: 8px 14px; 
+    border-radius: 8px; 
+    font-size: 13px; 
+    font-weight: 600; 
+    outline: none; 
+    transition: all 0.2s; 
+    -webkit-appearance: none;
+    box-sizing: border-box;
+}
+
+select:focus, 
+input:focus,
+input[type="text"]:focus, 
+input[type="number"]:focus { 
+    border-color: var(--primary) !important; 
+    background: var(--bg-card) !important; 
+    box-shadow: 0 0 0 3px var(--primary-bg); 
+}
+
 /* ══ نوار فیلتر ══ */
 .fbar { background: var(--bg-card); border: 1px solid var(--bd); border-radius: 10px; padding: 12px 20px; display: flex; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
 .fbar-label { font-size: 13px; font-weight: 700; color: var(--dim); white-space: nowrap; }
 .fgroup { display: flex; align-items: center; gap: 8px; }
 .fdivider { width: 1px; height: 24px; background: var(--bd); flex-shrink: 0; }
-select, input[type=number] { background: var(--surface-low); border: 1px solid transparent; color: var(--text); padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; outline: none; transition: all 0.2s; -webkit-appearance: none; }
-input[type=number] { direction: ltr; text-align: left; }
-select:focus, input:focus { border-color: var(--primary); background: var(--bg-card); box-shadow: 0 0 0 3px var(--primary-bg); }
 
 /* ══ پنل فیلتر طلایی ══ */
 .gfp { background: var(--gold-bg); border: 1px solid var(--gold); border-radius: 10px; margin-bottom: 18px; }
@@ -167,6 +191,7 @@ select:focus, input:focus { border-color: var(--primary); background: var(--bg-c
 .gfp-sep { height: 1px; background: var(--gold); opacity: 0.25; margin-bottom: 14px; }
 .gfp-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
 .gff label { display: block; font-size: 12px; font-weight: 700; color: var(--gold); margin-bottom: 6px; }
+.gff input { width: 100%; }
 
 /* ══ جداول ══ */
 .twrap { background: var(--bg-card); border: 1px solid var(--bd); border-radius: 10px; overflow: hidden; margin-bottom: 22px; box-shadow: 0 2px 8px rgba(0,0,0,0.02); }
@@ -215,7 +240,7 @@ tbody tr:hover td.sticky-col { background: var(--surface-low); }
 .calc-entry-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; max-width: 50%; }
 .cf label { display: block; font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
 .cf label span { color: var(--dim); }
-.cf input { width: 100%; background: var(--surface-low); border: 1px solid var(--bd); padding: 9px 12px; border-radius: 8px; font-size: 13.5px; font-weight: 600; }
+.cf input { width: 100%; }
 .calc-err { display: none; font-size: 12px; color: var(--error); background: var(--error-bg); border-radius: 6px; padding: 9px 14px; margin-bottom: 12px; }
 
 .calc-outputs { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; padding-top: 16px; border-top: 1px solid var(--surface-high); }
@@ -256,11 +281,63 @@ tbody tr:hover td.sticky-col { background: var(--surface-low); }
 .payoff-chart-container { width: 100%; height: 230px; background: var(--bg); border-radius: 6px; overflow: hidden; position: relative; }
 #cm-chart { width: 100%; height: 100%; }
 
+/* Tooltip اختصاصی چارت */
+.chart-tooltip { 
+    position: fixed; 
+    pointer-events: none; 
+    display: none; 
+    z-index: 99999; 
+    background: var(--bg-card); 
+    border: 1px solid var(--bd); 
+    border-radius: 8px; 
+    padding: 10px 14px; 
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22); 
+    font-size: 13px; 
+    direction: rtl; 
+    min-width: 180px; 
+    color: var(--text); 
+    font-family: 'Vazirmatn', sans-serif !important;
+}
+
+.chart-tooltip.visible { 
+    display: block !important; 
+}
+
+.tt-row { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    gap: 12px; 
+    margin-bottom: 6px; 
+}
+
+.tt-row:last-child { 
+    margin-bottom: 0; 
+}
+
+.tt-lbl { 
+    color: var(--muted); 
+    font-weight: 600; 
+    font-size: 12px; 
+}
+
+.tt-val { 
+    font-weight: 800; 
+    font-size: 13px; 
+}
+
+.tt-green { 
+    color: var(--secondary) !important; 
+}
+
+.tt-red { 
+    color: var(--error) !important; 
+}
+
 .cm-section-label { font-size: 12px; font-weight: 800; color: var(--dim); margin-bottom: 14px; text-transform: uppercase; }
 .cm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
 .cm-field label { display: block; font-size: 11.5px; font-weight: 700; color: var(--muted); margin-bottom: 5px; }
-.cm-field input { width: 100%; background: var(--surface-low); border: 1px solid var(--bd); font-size: 14px; padding: 9px 12px; font-weight: 700; color: var(--text); border-radius: 6px; }
-.cm-field input:focus { border-color: var(--primary); background: var(--bg-card); }
+.cm-field input { width: 100%; font-size: 14px; padding: 9px 12px; font-weight: 700; border-radius: 6px; }
 
 .cm-results { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
 .cm-res { background: var(--surface-low); border: 1px solid var(--bd); border-radius: 8px; padding: 12px; }
@@ -284,7 +361,7 @@ tbody tr:hover td.sticky-col { background: var(--surface-low); }
 .edu-stat strong { font-size: 13px; color: var(--text); }
 
 /* واکنش‌گرایی */
-button, select, input[type="number"] { min-height: 42px; }
+button, select, input { min-height: 42px; }
 
 @media (max-width: 960px) {
     .sgrid { grid-template-columns: repeat(2, 1fr); }

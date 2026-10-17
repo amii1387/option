@@ -1,4 +1,5 @@
 <?php
+date_default_timezone_set('Asia/Tehran');
 require_once __DIR__ . '/normalize.php';
 
 $cfg = require __DIR__ . '/../api/config.php';
@@ -14,7 +15,7 @@ $logFile     = $cfg['log_dir']  . '/collector-' . date('Y-m-d') . '.log';
 $lock = fopen($lockFile, 'c');
 if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) {
     if (defined('IS_MANUAL_UPDATE')) {
-        echo json_encode(['ok' => false, 'message' => 'بروزرسانی در پس‌زمینه در حال انجام است.']);
+        echo json_encode(['ok' => false, 'message' => 'بروزرسانی در حال انجام است.']);
         exit;
     }
     exit(0);
@@ -23,42 +24,96 @@ if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) {
 $startTime = microtime(true);
 $logEntry  = ['at' => date('Y-m-d H:i:s'), 'result' => null];
 
+function cleanSymbolName($str) {
+    $str = trim((string)$str);
+    $arabic = ['ي', 'ك', 'ى', 'ئ', '‌', '‏', ' '];
+    $persian = ['ی', 'ک', 'ی', 'ی', '', '', ''];
+    return str_replace($arabic, $persian, $str);
+}
+
 try {
-    $rawJson = fetchFromTsetmc($cfg);
-    if (!$rawJson) throw new Exception('Empty response from TSETMC');
+    $nowMs = round(microtime(true) * 1000);
+    $urlOptions = $cfg['tsetmc_url'] . (strpos($cfg['tsetmc_url'], '?') === false ? '?' : '&') . 't=' . $nowMs;
+    $rawOptions = fetchSingle($urlOptions, $cfg);
 
-    $parsed = json_decode($rawJson, true);
-    if (!is_array($parsed)) throw new Exception('Invalid JSON: ' . json_last_error_msg());
+    if (empty($rawOptions)) throw new Exception('پاسخی از وب‌سرویس مشتقه دریافت نشد');
+    $parsedOptions = json_decode($rawOptions, true);
+    if (!is_array($parsedOptions)) throw new Exception('فرمت JSON مشتقه نامعتبر است');
 
-    $result = normalizeTsetmcTradeOption($parsed);
+    $result = normalizeTsetmcTradeOption($parsedOptions);
     $rows   = $result['rows'];
     $stats  = $result['stats'];
 
     if (count($rows) < $cfg['min_rows']) {
-        throw new Exception('Too few rows: ' . count($rows));
+        throw new Exception('تعداد سطرهای دریافتی بسیار کم است: ' . count($rows));
     }
 
     require_once __DIR__ . '/strategies.php';
-    $strategies = calculateStrategies($rows);
 
+    $urlLive = 'https://cdn.tsetmc.com/api/ClosingPrice/GetMarketWatch?market=0&paperTypes[0]=1&paperTypes[1]=2&paperTypes[2]=3&paperTypes[3]=4&paperTypes[4]=7&paperTypes[5]=8&paperTypes[6]=9&withBestLimits=false&hEven=0&RefID=' . $nowMs;
+    $rawLive = fetchSingle($urlLive, $cfg, 10);
+
+    $lastPriceMap = [];
+    if (!empty($rawLive)) {
+        $parsedLive = json_decode($rawLive, true);
+        $stockList = [];
+        if (isset($parsedLive['marketwatch'])) {
+            $stockList = $parsedLive['marketwatch'];
+        } elseif (isset($parsedLive['closingPriceObject'])) {
+            $stockList = $parsedLive['closingPriceObject'];
+        } elseif (is_array($parsedLive)) {
+            $stockList = $parsedLive;
+        }
+
+        foreach ($stockList as $s) {
+            if (!is_array($s)) continue;
+            $rawSym = $s['lva'] ?? ($s['lVal18AFC'] ?? '');
+            $cleanSym = cleanSymbolName($rawSym);
+            if ($cleanSym === '') continue;
+
+            $lastP = 0;
+            if (isset($s['pdv']) && (float)$s['pdv'] > 0) $lastP = (float)$s['pdv'];
+            elseif (isset($s['pDrCotVal']) && (float)$s['pDrCotVal'] > 0) $lastP = (float)$s['pDrCotVal'];
+            elseif (isset($s['pl']) && (float)$s['pl'] > 0) $lastP = (float)$s['pl'];
+
+            if ($lastP > 0) $lastPriceMap[$cleanSym] = $lastP;
+        }
+    }
+
+    $logEntry['matched_last_prices'] = count($lastPriceMap);
+    $replacedCount = 0;
+    
+    foreach ($rows as &$r) {
+        $und = cleanSymbolName(extractUnderlying($r['نماد']));
+        if (isset($lastPriceMap[$und]) && $lastPriceMap[$und] > 0) {
+            $r['_base'] = $lastPriceMap[$und];
+            $replacedCount++;
+        }
+    }
+    unset($r);
+
+    $logEntry['replaced_rows'] = $replacedCount;
+    $strategies = calculateStrategies($rows);
     $now = time();
+    
     $payload = [
         'meta' => [
-            'updated_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('c'),
             'updated_ts' => $now,
-            'source'     => 'TSETMC MarketWatchTradeOption',
+            'source'     => 'TSETMC Live (Last Traded Price)',
             'rows'       => count($rows),
             'stats'      => $stats,
+            'raw_rows'   => $rows   // <---- کلید حیاتی برای دیده‌بان و زنجیره اضافه شد
         ],
         'data' => $strategies
     ];
-    
-    writeAtomic($latestFile, json_encode($payload, JSON_UNESCAPED_UNICODE));
 
+    writeAtomic($latestFile, json_encode($payload, JSON_UNESCAPED_UNICODE));
     writeAtomic($statusFile, json_encode([
         'success'      => true,
         'last_success' => date('Y-m-d H:i:s'),
         'rows'         => count($rows),
+        'last_p_count' => count($lastPriceMap)
     ], JSON_UNESCAPED_UNICODE));
 
     $logEntry['result'] = 'ok';
@@ -84,48 +139,36 @@ cleanOldLogs($cfg['log_dir'], $cfg['log_retention_days']);
 flock($lock, LOCK_UN);
 fclose($lock);
 
-if (!defined('IS_MANUAL_UPDATE')) {
-    exit(0);
+if (defined('IS_MANUAL_UPDATE')) {
+    if ($logEntry['result'] === 'ok') {
+        echo json_encode(['ok' => true, 'message' => 'داده‌ها با موفقیت دریافت شدند.', 'matched' => $logEntry['replaced_rows'] ?? 0]);
+    } else {
+        http_response_code(500);
+        echo json_encode(['ok' => false, 'message' => $logEntry['message'] ?? 'خطا در دریافت']);
+    }
+    exit;
 }
+exit(0);
 
-// === توابع ===
-function fetchFromTsetmc(array $cfg) {
-    $ch = curl_init($cfg['tsetmc_url']);
+function fetchSingle(string $url, array $cfg, int $timeout = 15): string {
+    $ch = curl_init($url);
     curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_TIMEOUT        => $cfg['timeout'],
-        CURLOPT_CONNECTTIMEOUT => $cfg['connect_timeout'],
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_SSL_VERIFYHOST => 0,
-        CURLOPT_USERAGENT      => $cfg['user_agent'],
-        CURLOPT_HTTPHEADER     => [
-            'Accept: application/json, text/plain, */*',
-            'Accept-Language: fa-IR,fa;q=0.9,en;q=0.8',
-            'Referer: https://www.tse.ir/',
-        ],
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_TIMEOUT => $timeout,
+        CURLOPT_CONNECTTIMEOUT => 5, CURLOPT_SSL_VERIFYPEER => false, CURLOPT_SSL_VERIFYHOST => 0,
+        CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        CURLOPT_HTTPHEADER     => ['Accept: application/json', 'Cache-Control: no-cache', 'Pragma: no-cache', 'Referer: https://tsetmc.com/'],
     ]);
-    $body = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $err  = curl_error($ch);
-    curl_close($ch);
-    if ($code !== 200 || !$body) throw new Exception("TSETMC HTTP $code — $err");
-    return $body;
+    $res = curl_exec($ch); $err = curl_error($ch); curl_close($ch);
+    if ($res === false || !empty($err)) throw new Exception("cURL Error: " . $err);
+    return (string)$res;
 }
-
 function writeAtomic(string $path, string $content) {
     $tmp = $path . '.tmp.' . getmypid() . '.' . mt_rand(1000, 9999);
-    if (@file_put_contents($tmp, $content, LOCK_EX) === false) throw new Exception("Cannot write to $tmp");
-    if (!@rename($tmp, $path)) {
-        @unlink($tmp);
-        throw new Exception("Cannot rename $tmp to $path");
-    }
+    if (@file_put_contents($tmp, $content, LOCK_EX) === false) throw new Exception("Cannot write");
+    if (!@rename($tmp, $path)) { @unlink($tmp); throw new Exception("Cannot rename"); }
     @chmod($path, 0644);
 }
-
 function cleanOldLogs(string $dir, int $days) {
     $threshold = time() - ($days * 86400);
-    foreach (glob($dir . '/collector-*.log') as $file) {
-        if (filemtime($file) < $threshold) @unlink($file);
-    }
+    foreach (glob($dir . '/collector-*.log') as $file) { if (filemtime($file) < $threshold) @unlink($file); }
 }
