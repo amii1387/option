@@ -111,19 +111,20 @@ try {
         'raw_rows'   => $rows
     ];
 
-    $strategies_last = calculateStrategies($rows, 'last');
-    $payload_last = [
-        'meta' => $meta,
-        'data' => $strategies_last
-    ];
-    writeAtomic($cfg['data_dir'] . '/latest_last.json', json_encode($payload_last, JSON_UNESCAPED_UNICODE));
+    // With Fees
+    global $USE_FEES;
+    $USE_FEES = true;
+    $payload_last = ['meta' => $meta, 'data' => calculateStrategies($rows, 'last')];
+    writeAtomic($cfg['data_dir'] . '/latest_last_1.json', json_encode($payload_last, JSON_UNESCAPED_UNICODE));
+    $payload_exec = ['meta' => $meta, 'data' => calculateStrategies($rows, 'exec')];
+    writeAtomic($cfg['data_dir'] . '/latest_exec_1.json', json_encode($payload_exec, JSON_UNESCAPED_UNICODE));
 
-    $strategies_exec = calculateStrategies($rows, 'exec');
-    $payload_exec = [
-        'meta' => $meta,
-        'data' => $strategies_exec
-    ];
-    writeAtomic($cfg['data_dir'] . '/latest_exec.json', json_encode($payload_exec, JSON_UNESCAPED_UNICODE));
+    // Without Fees
+    $USE_FEES = false;
+    $payload_last_0 = ['meta' => $meta, 'data' => calculateStrategies($rows, 'last')];
+    writeAtomic($cfg['data_dir'] . '/latest_last_0.json', json_encode($payload_last_0, JSON_UNESCAPED_UNICODE));
+    $payload_exec_0 = ['meta' => $meta, 'data' => calculateStrategies($rows, 'exec')];
+    writeAtomic($cfg['data_dir'] . '/latest_exec_0.json', json_encode($payload_exec_0, JSON_UNESCAPED_UNICODE));
 
     // Also keep latest.json as a copy of latest_last.json for backward compatibility or simple default
     writeAtomic($latestFile, json_encode($payload_last, JSON_UNESCAPED_UNICODE));

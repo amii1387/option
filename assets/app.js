@@ -170,15 +170,23 @@ function findIV(isCall, S, K, T, r, marketPrice) {
 function togglePriceBasis() {
     priceBasis = priceBasis === 'last' ? 'exec' : 'last';
     localStorage.setItem('priceBasis', priceBasis);
-    updatePriceBasisUI();
+    updateUIStates();
     manRefresh();
 }
-function updatePriceBasisUI() {
-    const btn = document.getElementById('btn-price-basis');
-    if(btn) {
-        btn.innerHTML = priceBasis === 'last' ? 'مبنا: آخرین' : 'مبنا: اجرایی';
-    }
+function toggleFees() {
+    useFees = !useFees;
+    localStorage.setItem('useFees', useFees);
+    updateUIStates();
+    manRefresh();
 }
+function updateUIStates() {
+    const btnP = document.getElementById('btn-price-basis');
+    if(btnP) btnP.innerHTML = priceBasis === 'last' ? 'مبنا: آخرین' : 'مبنا: اجرایی';
+    const btnF = document.getElementById('btn-fees');
+    if(btnF) btnF.innerHTML = useFees ? 'کارمزد: فعال' : 'کارمزد: غیرفعال';
+}
+// For backward compat on existing page load script
+function updatePriceBasisUI() { updateUIStates(); }
 async function forceUpdateData() {
     try {
         setBtnLoading('btn-force', true); updateLiveStatus(-1, 'در حال تریگر سرور...'); clearInterval(cdInt);

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/finance.php';
 // collector/strategies.php
 
 function calculateStrategies(array $rows, string $mode = 'last'): array {
@@ -6,13 +7,70 @@ function calculateStrategies(array $rows, string $mode = 'last'): array {
     $puts  = [];
     $MIN_VOL = 1000000000; // پیش‌فرض ۱ میلیارد ریال
 
+    // WIV Pre-calculation Phase
+    $wivMap = [];
+    $groups = [];
     foreach ($rows as $row) {
         $sym = trim($row['نماد'] ?? '');
         $isCall = isset($row['side']) ? $row['side'] === 'call' : mb_substr($sym, 0, 1, 'UTF-8') === 'ض';
+        $und = $row['underlying'] ?? $sym;
+        $exp = $row['تاریخ اعمال'] ?? '';
+        $key = "$und|$exp|" . ($isCall ? 'C' : 'P');
+
+        $S = (float)($row['_base'] ?? 0);
+        $K = (float)($row['قیمت اعمال'] ?? 0);
+        $T = max(1, (int)($row['_daysLeft'] ?? 1)) / 365.0;
+        $P = (float)($row['آخرین قیمت'] ?? 0); // Using lastP for IV as default
+        $vol = (float)($row['ارزش معاملات'] ?? 0);
+
+        if ($S > 0 && $K > 0 && $P > 0 && $vol > 0) {
+            global $CFG_FINANCE;
+            $r = $CFG_FINANCE['rf'];
+            $iv = findIV($isCall, $S, $K, $T, $r, $P);
+            if ($iv !== null) {
+                if (!isset($wivMap[$key])) {
+                    $wivMap[$key] = ['sumIVxVol' => 0, 'sumVol' => 0];
+                }
+                $wivMap[$key]['sumIVxVol'] += ($iv * $vol);
+                $wivMap[$key]['sumVol'] += $vol;
+            }
+        }
+    }
+    $WIV = [];
+    foreach ($wivMap as $k => $v) {
+        if ($v['sumVol'] > 0) {
+            $WIV[$k] = $v['sumIVxVol'] / $v['sumVol'];
+        }
+    }
+
+    foreach ($rows as $row) {
+        $sym = trim($row['نماد'] ?? '');
+        $isCall = isset($row['side']) ? $row['side'] === 'call' : mb_substr($sym, 0, 1, 'UTF-8') === 'ض';
+
+        $und = $row['underlying'] ?? $sym;
+        $exp = $row['تاریخ اعمال'] ?? '';
+        $key = "$und|$exp|" . ($isCall ? 'C' : 'P');
+        $wivVal = $WIV[$key] ?? null;
+
+        $T = max(1, (int)($row['_daysLeft'] ?? 1)) / 365.0;
+        $r = $CFG_FINANCE['rf'];
         
+        $bsWiv = null;
+        $bsGap = null;
+        $delta = null;
+        if ($wivVal !== null && $row['_base'] > 0) {
+            $bsWiv = bsCalc($isCall, $row['_base'], $row['قیمت اعمال'], $T, $r, $wivVal / 100.0);
+            if ($bsWiv > 0 && $row['آخرین قیمت'] > 0) {
+                $bsGap = (($row['آخرین قیمت'] - $bsWiv) / $bsWiv) * 100;
+            }
+            // Delta calc roughly from BS
+            $d1 = (log($row['_base'] / $row['قیمت اعمال']) + ($r + 0.5 * pow($wivVal/100, 2)) * $T) / (($wivVal/100) * sqrt($T));
+            $delta = $isCall ? cndf($d1) : cndf($d1) - 1;
+        }
+
         $item = [
-            'underlying' => $row['underlying'] ?? $sym,
-            'expiry'     => $row['تاریخ اعمال'] ?? '',
+            'underlying' => $und,
+            'expiry'     => $exp,
             'days'       => max(1, (int)($row['_daysLeft'] ?? 1)),
             'uprice'     => (float)($row['_base'] ?? 0),
             'strike'     => (float)($row['قیمت اعمال'] ?? 0),
@@ -21,6 +79,10 @@ function calculateStrategies(array $rows, string $mode = 'last'): array {
             'volume'     => (float)($row['ارزش معاملات'] ?? 0),
             'bid'        => (float)($row['قیمت بهترین تقاضا'] ?? 0),
             'ask'        => (float)($row['قیمت بهترین عرضه'] ?? 0),
+            'wiv'        => $wivVal,
+            'bsWiv'      => $bsWiv,
+            'bsGap'      => $bsGap,
+            'delta'      => $delta,
         ];
 
         if ($item['strike'] > 0 && $item['lastP'] > 0 && $item['volume'] >= $MIN_VOL) {
@@ -32,7 +94,7 @@ function calculateStrategies(array $rows, string $mode = 'last'): array {
         }
     }
 
-    return [
+    $res = [
         'bcs'         => buildBCS($calls, $MIN_VOL, $mode),
         'bps'         => buildBPS($puts, $MIN_VOL, $mode),
         'cc'          => buildCC($calls, $mode),
@@ -45,10 +107,18 @@ function calculateStrategies(array $rows, string $mode = 'last'): array {
         'lst'         => buildLongStrangle($calls, $puts, $MIN_VOL, $mode),
         'std'         => buildLongStraddle($calls, $puts, $MIN_VOL, $mode),
     ];
+    applyScannerScores($res);
+    return $res;
 }
 
 
 
+function getExecMetrics($legs, $mode) {
+    if ($mode !== 'exec') return []; // metrics are relevant regardless, but instructions say "بدون وابستگی به price_basis؛ همیشه از bid/ask".
+    // Actually instructions: "برای BCS... همیشه از bid/ask"
+    // Let's implement ndBest, ndWorst, exitCredit, etc for pairs first.
+    return [];
+}
 function getPrice($item, $action, $mode) {
     if ($mode === 'last') return $item['lastP'];
     // In exec mode: if we buy, we pay the ask price. If we sell, we receive the bid price.
@@ -87,18 +157,26 @@ function buildBCS($calls, $MIN_VOL, $mode = 'last') {
                 $nd = $buyP - $sellP;
                 if ($nd <= 0) continue;
 
+                $fee = feeOpt($buyP + $sellP, true); // Assuming ?fees=1 is default
+
                 $ks = $sell['strike'] - $buy['strike'];
-                $mp = $ks - $nd;
+                $mp = $ks - $nd - $fee;
                 if ($mp <= 0) continue;
 
-                $be = $buy['strike'] + $nd;
-                $rr = $mp / $nd;
-                $sm = (($buy['uprice'] - $be) / $buy['uprice']) * 100;
+                $be = $buy['strike'] + $nd + $fee;
+                $rr = $mp / ($nd + $fee);
+                $sm = $buy['uprice'] > 0 ? (($buy['uprice'] - $be) / $buy['uprice']) * 100 : 0;
 
-                $exitExecution = ($buy['bid'] > 0 && $sell['ask'] > 0) ? $buy['bid'] - $sell['ask'] : 0;
-                $exitQuality   = ($nd > 0 && $exitExecution > 0) ? min(100, ($exitExecution / $nd) * 100) : 0;
-                $exitGap       = max(0, $nd - $exitExecution);
-                $slippagePct   = ($mp > 0) ? ($exitGap / $mp) * 100 : 999;
+                // Execution Metrics
+                $ndBest = ($buy['bid'] > 0 && $sell['ask'] > 0) ? $buy['bid'] - $sell['ask'] : null;
+                $ndWorst = ($buy['ask'] > 0 && $sell['bid'] > 0) ? $buy['ask'] - $sell['bid'] : null;
+
+                $exitCredit = ($buy['bid'] > 0 && $sell['ask'] > 0) ? $buy['bid'] - $sell['ask'] : null;
+                $lastExitCredit = $buy['lastP'] - $sell['lastP'];
+                $exitGap = $exitCredit !== null ? $lastExitCredit - $exitCredit : null;
+                $exitQualityPct = ($exitCredit !== null && $lastExitCredit > 0) ? max(0, min(100, ($exitCredit / $lastExitCredit) * 100)) : null;
+
+                $retWorst = ($ndWorst !== null && $ndWorst > 0 && ($ks - $ndWorst - $fee) > 0) ? ($ks - $ndWorst - $fee)/$ndWorst*100 : null;
 
                 $bcs[] = [
                     'underlying'  => $buy['underlying'], 'expiry' => $buy['expiry'], 'days' => $buy['days'],
@@ -106,9 +184,9 @@ function buildBCS($calls, $MIN_VOL, $mode = 'last') {
                     'sym1'        => $buy['symRaw'], 'sym2' => $sell['symRaw'],
                     'p1'          => $buy['lastP'], 'p2' => $sell['lastP'],
                     'v1'          => $buy['volume'], 'v2' => $sell['volume'],
-                    'netDebit'    => $nd, 'maxProfit' => $mp, 'maxLoss' => $nd, 'breakeven' => $be,
+                    'netDebit'    => $nd, 'fee' => $fee, 'maxProfit' => $mp, 'maxLoss' => $nd + $fee, 'breakeven' => $be,
                     'returnPct'   => $rr * 100, 'safetyMargin' => $sm,
-                    'exitQuality' => $exitQuality, 'exitGap' => $exitGap, 'slippagePct' => $slippagePct
+                    'exitQuality' => $exitQualityPct, 'exitGap' => $exitGap, 'ndWorst' => $ndWorst, 'retWorst' => $retWorst
                 ];
             }
         }
@@ -139,12 +217,14 @@ function buildBPS($puts, $MIN_VOL, $mode = 'last') {
                 $nd = $buyP - $sellP;
                 if ($nd <= 0) continue;
 
+                $fee = feeOpt($buyP + $sellP, true);
+
                 $ks = $buy['strike'] - $sell['strike'];
-                $mp = $ks - $nd;
+                $mp = $ks - $nd - $fee;
                 if ($mp <= 0) continue;
 
-                $be = $buy['strike'] - $nd;
-                $rr = $mp / $nd;
+                $be = $buy['strike'] - $nd - $fee;
+                $rr = $mp / ($nd + $fee);
                 $sm = (($be - $buy['uprice']) / $buy['uprice']) * 100;
 
                 $bps[] = [
@@ -153,7 +233,7 @@ function buildBPS($puts, $MIN_VOL, $mode = 'last') {
                     'sym1'       => $sell['symRaw'], 'sym2' => $buy['symRaw'],
                     'p1'         => $sell['lastP'], 'p2' => $buy['lastP'],
                     'v1'         => $sell['volume'], 'v2' => $buy['volume'],
-                    'netDebit'   => $nd, 'maxProfit' => $mp, 'maxLoss' => $nd, 'breakeven' => $be,
+                    'netDebit'   => $nd, 'maxProfit' => $mp, 'maxLoss' => $nd + $fee, 'fee' => $fee, 'breakeven' => $be,
                     'returnPct'  => $rr * 100, 'safetyMargin' => $sm
                 ];
             }
@@ -418,11 +498,13 @@ function buildLongCallCondor($calls, $MIN_VOL, $mode = 'last') {
             $netCost = ($c1P + $c4P) - ($c2P + $c3P);
             if ($netCost <= 0) continue;
 
-            $maxProfit = ($c2['strike'] - $c1['strike']) - $netCost;
+            $fee = feeOpt($c1P + $c4P + $c2P + $c3P);
+
+            $maxProfit = ($c2['strike'] - $c1['strike']) - $netCost - $fee;
             if ($maxProfit <= 0) continue;
 
-            $beLower = $c1['strike'] + $netCost;
-            $beUpper = $c4['strike'] - $netCost;
+            $beLower = $c1['strike'] + $netCost + $fee;
+            $beUpper = $c4['strike'] - $netCost - $fee;
             $uprice  = $c1['uprice'];
             $inRange = ($uprice >= $c2['strike'] && $uprice <= $c3['strike']);
 
