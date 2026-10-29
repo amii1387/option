@@ -1,6 +1,8 @@
 /* ══ GLOBAL STATE ══ */
 let strats = { bcs: [], bps: [], cc: [], collar: [], conversion: [], mrp: [], long_box: [], strangle: [], condor: [], lst: [], std: [] };
 let allOptionsRows = [];
+let priceBasis = localStorage.getItem('priceBasis') || 'last';
+let useFees = localStorage.getItem('useFees') !== 'false';
 let cdSec = 60, cdInt = null, _cmType = null;
 window.lastUpdateTs = null;
 let currentChartData = null;
@@ -195,7 +197,7 @@ async function forceUpdateData() {
 async function loadLiveData(manual = false) {
     try {
         if(manual) setBtnLoading('btn-refresh', true);
-        const r = await fetch('api/options.php?t=' + Date.now());
+        const r = await fetch('api/options.php?price=' + priceBasis + '&fees=' + (useFees ? '1' : '0'));
         if (r.status === 304 && !manual) return;
         if (r.status === 503) { if (!manual) forceUpdateData(); return; }
         const payload = await r.json();
