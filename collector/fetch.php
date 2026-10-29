@@ -76,7 +76,14 @@ try {
             elseif (isset($s['pDrCotVal']) && (float)$s['pDrCotVal'] > 0) $lastP = (float)$s['pDrCotVal'];
             elseif (isset($s['pl']) && (float)$s['pl'] > 0) $lastP = (float)$s['pl'];
 
-            if ($lastP > 0) $lastPriceMap[$cleanSym] = $lastP;
+            if ($lastP > 0) {
+                $askP = 0;
+                // find ask price for underlying
+                if (isset($s['blDs']) && is_array($s['blDs']) && count($s['blDs']) > 0) {
+                    $askP = (float)($s['blDs'][0]['pMeDem'] ?? 0);
+                }
+                $lastPriceMap[$cleanSym] = ['last' => $lastP, 'ask' => $askP];
+            }
         }
     }
 
@@ -85,30 +92,41 @@ try {
     
     foreach ($rows as &$r) {
         $und = cleanSymbolName(extractUnderlying($r['نماد']));
-        if (isset($lastPriceMap[$und]) && $lastPriceMap[$und] > 0) {
-            $r['_base'] = $lastPriceMap[$und];
+        if (isset($lastPriceMap[$und]) && $lastPriceMap[$und]['last'] > 0) {
+            $r['_base'] = $lastPriceMap[$und]['last'];
+            $r['uask'] = $lastPriceMap[$und]['ask'];
             $replacedCount++;
         }
     }
     unset($r);
 
     $logEntry['replaced_rows'] = $replacedCount;
-    $strategies = calculateStrategies($rows);
     $now = time();
-    
-    $payload = [
-        'meta' => [
-            'updated_at' => date('c'),
-            'updated_ts' => $now,
-            'source'     => 'TSETMC Live (Last Traded Price)',
-            'rows'       => count($rows),
-            'stats'      => $stats,
-            'raw_rows'   => $rows   // <---- کلید حیاتی برای دیده‌بان و زنجیره اضافه شد
-        ],
-        'data' => $strategies
+    $meta = [
+        'updated_at' => date('c'),
+        'updated_ts' => $now,
+        'source'     => 'TSETMC Live',
+        'rows'       => count($rows),
+        'stats'      => $stats,
+        'raw_rows'   => $rows
     ];
 
-    writeAtomic($latestFile, json_encode($payload, JSON_UNESCAPED_UNICODE));
+    $strategies_last = calculateStrategies($rows, 'last');
+    $payload_last = [
+        'meta' => $meta,
+        'data' => $strategies_last
+    ];
+    writeAtomic($cfg['data_dir'] . '/latest_last.json', json_encode($payload_last, JSON_UNESCAPED_UNICODE));
+
+    $strategies_exec = calculateStrategies($rows, 'exec');
+    $payload_exec = [
+        'meta' => $meta,
+        'data' => $strategies_exec
+    ];
+    writeAtomic($cfg['data_dir'] . '/latest_exec.json', json_encode($payload_exec, JSON_UNESCAPED_UNICODE));
+
+    // Also keep latest.json as a copy of latest_last.json for backward compatibility or simple default
+    writeAtomic($latestFile, json_encode($payload_last, JSON_UNESCAPED_UNICODE));
     writeAtomic($statusFile, json_encode([
         'success'      => true,
         'last_success' => date('Y-m-d H:i:s'),
@@ -119,7 +137,7 @@ try {
     $logEntry['result'] = 'ok';
     $logEntry['rows']   = count($rows);
 
-} catch (Exception $e) {
+} catch (Throwable $e) {
     $prev = @json_decode(@file_get_contents($statusFile), true) ?: [];
     writeAtomic($statusFile, json_encode([
         'success'      => false,
@@ -152,10 +170,11 @@ exit(0);
 
 function fetchSingle(string $url, array $cfg, int $timeout = 15): string {
     $ch = curl_init($url);
+    $verify_ssl = isset($cfg['ca_bundle']) ? $cfg['ca_bundle'] : true;
     curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_TIMEOUT => $timeout,
-        CURLOPT_CONNECTTIMEOUT => 5, CURLOPT_SSL_VERIFYPEER => false, CURLOPT_SSL_VERIFYHOST => 0,
-        CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_TIMEOUT => $cfg['timeout'] ?? $timeout,
+        CURLOPT_CONNECTTIMEOUT => $cfg['connect_timeout'] ?? 5, CURLOPT_SSL_VERIFYPEER => $verify_ssl, CURLOPT_SSL_VERIFYHOST => $verify_ssl ? 2 : 0,
+        CURLOPT_USERAGENT      => $cfg['user_agent'] ?? 'Mozilla/5.0',
         CURLOPT_HTTPHEADER     => ['Accept: application/json', 'Cache-Control: no-cache', 'Pragma: no-cache', 'Referer: https://tsetmc.com/'],
     ]);
     $res = curl_exec($ch); $err = curl_error($ch); curl_close($ch);
