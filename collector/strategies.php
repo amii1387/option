@@ -2,6 +2,46 @@
 require_once __DIR__ . '/finance.php';
 // collector/strategies.php
 
+function applyScannerScores(&$strategiesArray) {
+    global $CFG_FINANCE;
+    $w = $CFG_FINANCE['scanner_weights'] ?? ['profit' => 0.3, 'safety' => 0.2, 'execution' => 0.3, 'liquidity' => 0.2];
+
+    foreach ($strategiesArray as $stratName => &$list) {
+        if (!is_array($list)) continue;
+        if (in_array($stratName, ['mrp', 'bcs', 'bps', 'cc', 'collar', 'conversion', 'long_box', 'strangle', 'condor', 'lst', 'std'])) {
+            foreach ($list as &$item) {
+                // Volume
+                $vol = min($item['v1'] ?? INF, $item['v2'] ?? INF, $item['callVol'] ?? INF, $item['putVol'] ?? INF);
+                if ($vol === INF) {
+                    $vol = $item['volume'] ?? 0;
+                }
+                $liqScore = max(0, min(100, 20 + log10(1 + $vol / 1e9) * 40));
+
+                // Safety
+                $safety = $item['safetyMargin'] ?? -50;
+                $safetyScore = max(0, min(100, 50 + $safety * 1.5));
+
+                // Execution
+                $execScore = $item['exitQuality'] ?? 50;
+
+                // Profit
+                $capital = max(1, $item['maxLoss'] ?? $item['netCost'] ?? 1);
+                $m = ($item['maxProfit'] ?? 0) * 1000 / $capital * 100;
+                $profitScore = max(0, min(100, 100 * $m / ($m + 30)));
+
+                $overall = ($w['profit'] * $profitScore) + ($w['safety'] * $safetyScore) + ($w['execution'] * $execScore) + ($w['liquidity'] * $liqScore);
+
+                $item['scores'] = [
+                    'overall' => $overall,
+                    'liq' => $liqScore,
+                    'saf' => $safetyScore,
+                    'exe' => $execScore,
+                    'pro' => $profitScore
+                ];
+            }
+        }
+    }
+}
 function calculateStrategies(array $rows, string $mode = 'last'): array {
     $calls = [];
     $puts  = [];
@@ -54,7 +94,7 @@ function calculateStrategies(array $rows, string $mode = 'last'): array {
 
         $T = max(1, (int)($row['_daysLeft'] ?? 1)) / 365.0;
         $r = $CFG_FINANCE['rf'];
-        
+
         $bsWiv = null;
         $bsGap = null;
         $delta = null;

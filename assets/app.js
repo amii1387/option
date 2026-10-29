@@ -1,6 +1,8 @@
 /* ══ GLOBAL STATE ══ */
 let strats = { bcs: [], bps: [], cc: [], collar: [], conversion: [], mrp: [], long_box: [], strangle: [], condor: [], lst: [], std: [] };
 let allOptionsRows = [];
+let priceBasis = localStorage.getItem('priceBasis') || 'last';
+let useFees = localStorage.getItem('useFees') !== 'false';
 let cdSec = 60, cdInt = null, _cmType = null;
 window.lastUpdateTs = null;
 let currentChartData = null;
@@ -130,11 +132,7 @@ function bsCalc(isCall, S, K, T, r, sigma) {
     let price = isCall ? (S * cndf(d1) - K * Math.exp(-r * T) * cndf(d2)) : (K * Math.exp(-r * T) * cndf(-d2) - S * cndf(-d1));
     return { price: Math.max(0, price), delta: isCall ? cndf(d1) : cndf(d1) - 1 };
 }
-function bsCalc(isCall, S, K, T, r, sigma) {
-    const d1 = (Math.log(S / K) + (r + 0.5 * sigma * sigma) * T) / (sigma * Math.sqrt(T));
-    const d2 = d1 - sigma * Math.sqrt(T);
-    return isCall ? (S * cndf(d1) - K * Math.exp(-r * T) * cndf(d2)) : (K * Math.exp(-r * T) * cndf(-d2) - S * cndf(-d1));
-}
+
 
 function findIV(isCall, S, K, T, r, marketPrice) {
     if (marketPrice <= 0 || S <= 0 || K <= 0 || T <= 0) return null;
@@ -144,7 +142,7 @@ function findIV(isCall, S, K, T, r, marketPrice) {
     let sigma = 0.4;
     for (let i = 0; i < 35; i++) {
         const d1 = (Math.log(S / K) + (r + 0.5 * sigma * sigma) * T) / (sigma * Math.sqrt(T));
-        const p = bsCalc(isCall, S, K, T, r, sigma);
+        const p = bsCalc(isCall, S, K, T, r, sigma).price;
         const diff = p - marketPrice;
         if (Math.abs(diff) < 0.1) return sigma * 100;
         const vega = S * Math.sqrt(T) * npdf(d1);
@@ -158,7 +156,7 @@ function findIV(isCall, S, K, T, r, marketPrice) {
     let low = 0.001, high = 5.0;
     for (let i = 0; i < 50; i++) {
         let mid = (low + high) / 2;
-        let p = bsCalc(isCall, S, K, T, r, mid);
+        let p = bsCalc(isCall, S, K, T, r, mid).price;
         if (Math.abs(p - marketPrice) < 0.1) return mid * 100;
         if (p < marketPrice) low = mid;
         else high = mid;
@@ -199,7 +197,7 @@ async function forceUpdateData() {
 async function loadLiveData(manual = false) {
     try {
         if(manual) setBtnLoading('btn-refresh', true);
-        const r = await fetch('api/options.php?t=' + Date.now());
+        const r = await fetch('api/options.php?price=' + priceBasis + '&fees=' + (useFees ? '1' : '0'));
         if (r.status === 304 && !manual) return;
         if (r.status === 503) { if (!manual) forceUpdateData(); return; }
         const payload = await r.json();

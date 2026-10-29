@@ -10,7 +10,6 @@ function getFeeOptRate() {
 function feeOpt($P) {
     global $USE_FEES;
     if (isset($USE_FEES) && !$USE_FEES) return 0;
-    if (!$use_fees) return 0;
     return $P * getFeeOptRate();
 }
 
@@ -18,7 +17,6 @@ function feeStk($S, $isEtf) {
     global $USE_FEES;
     if (isset($USE_FEES) && !$USE_FEES) return 0;
     global $CFG_FINANCE;
-    if (!$use_fees) return 0;
     $rates = $CFG_FINANCE['fees'];
     if ($isEtf) {
         return $S * ($rates['etf_buy'] + $rates['etf_sell']);
