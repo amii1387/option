@@ -1,7 +1,11 @@
 <?php
 $cfg = require __DIR__ . '/config.php';
 
-$latestFile = $cfg['data_dir'] . '/latest.json';
+$price_mode = isset($_GET['price']) && $_GET['price'] === 'exec' ? 'exec' : 'last';
+$latestFile = $cfg['data_dir'] . "/latest_{$price_mode}.json";
+if (!file_exists($latestFile)) {
+    $latestFile = $cfg['data_dir'] . '/latest.json';
+}
 $statusFile = $cfg['data_dir'] . '/status.json';
 
 if (!file_exists($latestFile)) {
@@ -12,8 +16,9 @@ if (!file_exists($latestFile)) {
 }
 
 // مدیریت ETag برای کش
-$mtime = filemtime($latestFile);
-$etag = '"' . md5($mtime) . '"';
+$mtime_latest = file_exists($latestFile) ? filemtime($latestFile) : 0;
+$mtime_status = file_exists($statusFile) ? filemtime($statusFile) : 0;
+$etag = '"' . md5($mtime_latest . '_' . $mtime_status . '_' . $price_mode) . '"';
 
 header('Cache-Control: public, max-age=15'); 
 header('ETag: ' . $etag);
@@ -27,7 +32,8 @@ if (isset($_SERVER['HTTP_IF_NONE_MATCH']) && trim($_SERVER['HTTP_IF_NONE_MATCH']
 ob_start('ob_gzhandler');
 
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: https://hseqi.ir'); // الزامی برای امنیت
+$cors = $cfg['cors_domain'] ?? 'https://hseqi.ir';
+header('Access-Control-Allow-Origin: ' . $cors);
 
 $raw = @file_get_contents($latestFile);
 $payload = json_decode($raw, true);

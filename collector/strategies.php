@@ -1,17 +1,17 @@
 <?php
 // collector/strategies.php
 
-function calculateStrategies(array $rows): array {
+function calculateStrategies(array $rows, string $mode = 'last'): array {
     $calls = [];
     $puts  = [];
     $MIN_VOL = 1000000000; // پیش‌فرض ۱ میلیارد ریال
 
     foreach ($rows as $row) {
         $sym = trim($row['نماد'] ?? '');
-        $isCall = mb_substr($sym, 0, 1, 'UTF-8') === 'ض';
+        $isCall = isset($row['side']) ? $row['side'] === 'call' : mb_substr($sym, 0, 1, 'UTF-8') === 'ض';
         
         $item = [
-            'underlying' => extractUnderlying($sym),
+            'underlying' => $row['underlying'] ?? $sym,
             'expiry'     => $row['تاریخ اعمال'] ?? '',
             'days'       => max(1, (int)($row['_daysLeft'] ?? 1)),
             'uprice'     => (float)($row['_base'] ?? 0),
@@ -23,7 +23,7 @@ function calculateStrategies(array $rows): array {
             'ask'        => (float)($row['قیمت بهترین عرضه'] ?? 0),
         ];
 
-        if ($item['strike'] > 0 && $item['lastP'] > 0) {
+        if ($item['strike'] > 0 && $item['lastP'] > 0 && $item['volume'] >= $MIN_VOL) {
             if ($isCall) {
                 $calls[] = $item;
             } else {
@@ -33,40 +33,39 @@ function calculateStrategies(array $rows): array {
     }
 
     return [
-        'bcs'         => buildBCS($calls, $MIN_VOL),
-        'bps'         => buildBPS($puts, $MIN_VOL),
-        'cc'          => buildCC($calls),
-        'collar'      => buildCollar($calls, $puts, $MIN_VOL),
-        'conversion'  => buildConversion($calls, $puts, $MIN_VOL),
-        'mrp'         => buildMarriedPut($puts),
-        'long_box'    => buildLongBox($calls, $puts),
-        'strangle'    => buildShortStrangle($calls, $puts, $MIN_VOL),
-        'condor'      => buildLongCallCondor($calls, $MIN_VOL),
-        'lst'         => buildLongStrangle($calls, $puts, $MIN_VOL),
-        'std'         => buildLongStraddle($calls, $puts, $MIN_VOL),
+        'bcs'         => buildBCS($calls, $MIN_VOL, $mode),
+        'bps'         => buildBPS($puts, $MIN_VOL, $mode),
+        'cc'          => buildCC($calls, $mode),
+        'collar'      => buildCollar($calls, $puts, $MIN_VOL, $mode),
+        'conversion'  => buildConversion($calls, $puts, $MIN_VOL, $mode),
+        'mrp'         => buildMarriedPut($puts, $mode),
+        'long_box'    => buildLongBox($calls, $puts, $mode),
+        'strangle'    => buildShortStrangle($calls, $puts, $MIN_VOL, $mode),
+        'condor'      => buildLongCallCondor($calls, $MIN_VOL, $mode),
+        'lst'         => buildLongStrangle($calls, $puts, $MIN_VOL, $mode),
+        'std'         => buildLongStraddle($calls, $puts, $MIN_VOL, $mode),
     ];
 }
 
-function extractUnderlying($sym) {
-    $umap = [
-        'هرم'=>'اهرم','خود'=>'خودرو','سپا'=>'خساپا','ستا'=>'شستا',
-        'شنا'=>'شپنا','ملت'=>'وبملت','ملی'=>'فملی','ملي'=>'فملي',
-        'صاد'=>'وبصادر','جار'=>'وتجارت','تاص'=>'تاصيكو','جوا'=>'جوانه كوچك',
-        'مخا'=>'اخابر','همن'=>'خبهمن','ستر'=>'خگستر','راز'=>'هم تراز',
-        'درو'=>'دارونو'
-    ];
-    $b = trim((string)$sym);
-    $firstChar = mb_substr($b, 0, 1, 'UTF-8');
-    if ($firstChar === 'ض' || $firstChar === 'ط' || $firstChar === 'ح') {
-        $b = mb_substr($b, 1, null, 'UTF-8');
+
+
+function getPrice($item, $action, $mode) {
+    if ($mode === 'last') return $item['lastP'];
+    // In exec mode: if we buy, we pay the ask price. If we sell, we receive the bid price.
+    if ($action === 'buy') {
+        return $item['ask'] > 0 ? $item['ask'] : null;
+    } else { // sell
+        return $item['bid'] > 0 ? $item['bid'] : null;
     }
-    $b = preg_replace('/[0-9٠-٩۰-۹]+$/u', '', $b);
-    $b = trim($b);
-    return $umap[$b] ?? $b;
 }
-
+function getUPrice($item, $action, $mode) {
+    if ($mode === 'last') return $item['uprice'];
+    // if action is buy, we pay the ask price of underlying (which we don't have yet, we only have _base, but if _base has ask, we should use it. For now, let's use uprice as fallback).
+    if ($action === 'buy' && isset($item['uask']) && $item['uask'] > 0) return $item['uask'];
+    return $item['uprice'];
+}
 /* ══ ۱. Bull Call Spread ══ */
-function buildBCS($calls, $MIN_VOL) {
+function buildBCS($calls, $MIN_VOL, $mode = 'last') {
     $bcs = [];
     $groups = [];
     foreach ($calls as $c) {
@@ -82,7 +81,10 @@ function buildBCS($calls, $MIN_VOL) {
                 $buy = $group[$i];
                 $sell = $group[$j];
 
-                $nd = $buy['lastP'] - $sell['lastP'];
+                $buyP = getPrice($buy, 'buy', $mode);
+                $sellP = getPrice($sell, 'sell', $mode);
+                if ($buyP === null || $sellP === null) continue;
+                $nd = $buyP - $sellP;
                 if ($nd <= 0) continue;
 
                 $ks = $sell['strike'] - $buy['strike'];
@@ -115,7 +117,7 @@ function buildBCS($calls, $MIN_VOL) {
 }
 
 /* ══ ۲. Bear Put Spread ══ */
-function buildBPS($puts, $MIN_VOL) {
+function buildBPS($puts, $MIN_VOL, $mode = 'last') {
     $bps = [];
     $groups = [];
     foreach ($puts as $p) {
@@ -131,7 +133,10 @@ function buildBPS($puts, $MIN_VOL) {
                 $sell = $group[$i]; // فروش K1
                 $buy  = $group[$j]; // خرید K2
 
-                $nd = $buy['lastP'] - $sell['lastP'];
+                $buyP = getPrice($buy, 'buy', $mode);
+                $sellP = getPrice($sell, 'sell', $mode);
+                if ($buyP === null || $sellP === null) continue;
+                $nd = $buyP - $sellP;
                 if ($nd <= 0) continue;
 
                 $ks = $buy['strike'] - $sell['strike'];
@@ -158,7 +163,7 @@ function buildBPS($puts, $MIN_VOL) {
 }
 
 /* ══ ۳. Covered Call ══ */
-function buildCC($calls) {
+function buildCC($calls, $mode = 'last') {
     $cc = [];
     foreach ($calls as $c) {
         if ($c['uprice'] <= 0 || $c['days'] <= 0) continue;
@@ -182,7 +187,7 @@ function buildCC($calls) {
 }
 
 /* ══ ۴. Collar ══ */
-function buildCollar($calls, $puts, $MIN_VOL) {
+function buildCollar($calls, $puts, $MIN_VOL, $mode = 'last') {
     $collar = [];
     $putMap = [];
     foreach ($puts as $p) {
@@ -219,7 +224,7 @@ function buildCollar($calls, $puts, $MIN_VOL) {
 }
 
 /* ══ ۵. Conversion Arbitrage ══ */
-function buildConversion($calls, $puts, $MIN_VOL) {
+function buildConversion($calls, $puts, $MIN_VOL, $mode = 'last') {
     $conv = [];
     $putMap = [];
     foreach ($puts as $p) {
@@ -254,7 +259,7 @@ function buildConversion($calls, $puts, $MIN_VOL) {
 }
 
 /* ══ ۶. Married Put ══ */
-function buildMarriedPut($puts) {
+function buildMarriedPut($puts, $mode = 'last') {
     $mrp = [];
     foreach ($puts as $p) {
         if ($p['uprice'] <= 0) continue;
@@ -274,7 +279,7 @@ function buildMarriedPut($puts) {
 }
 
 /* ══ ۷. Long Box Arbitrage ══ */
-function buildLongBox($calls, $puts) {
+function buildLongBox($calls, $puts, $mode = 'last') {
     $boxStrategies = [];
     $groupedCalls = [];
     $groupedPuts  = [];
@@ -332,7 +337,7 @@ function buildLongBox($calls, $puts) {
 }
 
 /* ══ ۸. Short Strangle ══ */
-function buildShortStrangle($calls, $puts, $MIN_VOL) {
+function buildShortStrangle($calls, $puts, $MIN_VOL, $mode = 'last') {
     $strangles = [];
     $groupedCalls = [];
     $groupedPuts  = [];
@@ -379,7 +384,7 @@ function buildShortStrangle($calls, $puts, $MIN_VOL) {
 }
 
 /* ══ ۹. Long Call Condor ══ */
-function buildLongCallCondor($calls, $MIN_VOL) {
+function buildLongCallCondor($calls, $MIN_VOL, $mode = 'last') {
     $condors = [];
     $groups = [];
     foreach ($calls as $c) {
@@ -391,16 +396,26 @@ function buildLongCallCondor($calls, $MIN_VOL) {
         usort($group, fn($a, $b) => $a['strike'] <=> $b['strike']);
         $len = count($group);
         if ($len < 4) continue;
+        $condor_count = 0;
 
         for ($i = 0; $i < $len - 3; $i++) {
-            $c1 = $group[$i];
-            $c2 = $group[$i + 1];
-            $c3 = $group[$i + 2];
-            $c4 = $group[$i + 3];
+            for ($j = $i + 1; $j < $len - 2; $j++) {
+                for ($k = $j + 1; $k < $len - 1; $k++) {
+                    for ($l = $k + 1; $l < $len; $l++) {
+                        if ($condor_count > 15) break 4;
+                        $c1 = $group[$i];
+                        $c2 = $group[$j];
+                        $c3 = $group[$k];
+                        $c4 = $group[$l];
 
-            if (($c2['strike'] - $c1['strike']) !== ($c4['strike'] - $c3['strike'])) continue;
+                        if (abs(($c2['strike'] - $c1['strike']) - ($c4['strike'] - $c3['strike'])) > 1e-9) continue;
 
-            $netCost = ($c1['lastP'] + $c4['lastP']) - ($c2['lastP'] + $c3['lastP']);
+            $c1P = getPrice($c1, 'buy', $mode);
+            $c4P = getPrice($c4, 'buy', $mode);
+            $c2P = getPrice($c2, 'sell', $mode);
+            $c3P = getPrice($c3, 'sell', $mode);
+            if ($c1P === null || $c4P === null || $c2P === null || $c3P === null) continue;
+            $netCost = ($c1P + $c4P) - ($c2P + $c3P);
             if ($netCost <= 0) continue;
 
             $maxProfit = ($c2['strike'] - $c1['strike']) - $netCost;
@@ -420,13 +435,14 @@ function buildLongCallCondor($calls, $MIN_VOL) {
                 'retPct'     => ($maxProfit / $netCost) * 100,
                 'inRange'    => $inRange
             ];
-        }
+            $condor_count++;
+            }}}}
     }
     return $condors;
 }
 
 /* ══ ۱۰. Long Strangle ══ */
-function buildLongStrangle($calls, $puts, $MIN_VOL) {
+function buildLongStrangle($calls, $puts, $MIN_VOL, $mode = 'last') {
     $strangles = [];
     $groupedCalls = [];
     $groupedPuts  = [];
@@ -447,8 +463,16 @@ function buildLongStrangle($calls, $puts, $MIN_VOL) {
         foreach ($callList as $c) {
             foreach ($putList as $p) {
                 if ($p['strike'] >= $c['strike']) continue;
+                $uprice = $c['uprice'];
+                if ($uprice > 0) {
+                    if (abs($c['strike'] - $uprice) / $uprice > 0.3) continue;
+                    if (abs($p['strike'] - $uprice) / $uprice > 0.3) continue;
+                }
 
-                $totalCost = $c['lastP'] + $p['lastP'];
+                $callP = getPrice($c, 'buy', $mode);
+                $putP = getPrice($p, 'buy', $mode);
+                if ($callP === null || $putP === null) continue;
+                $totalCost = $callP + $putP;
                 $beUpper = $c['strike'] + $totalCost;
                 $beLower = $p['strike'] - $totalCost;
                 $uprice  = $c['uprice'];
@@ -471,7 +495,7 @@ function buildLongStrangle($calls, $puts, $MIN_VOL) {
 }
 
 /* ══ ۱۱. Long Straddle ══ */
-function buildLongStraddle($calls, $puts, $MIN_VOL) {
+function buildLongStraddle($calls, $puts, $MIN_VOL, $mode = 'last') {
     $straddles = [];
     $putMap = [];
     foreach ($puts as $p) {
@@ -485,7 +509,10 @@ function buildLongStraddle($calls, $puts, $MIN_VOL) {
         if (!isset($putMap[$key])) continue;
 
         $p = $putMap[$key];
-        $totalCost = $c['lastP'] + $p['lastP'];
+        $callP = getPrice($c, 'buy', $mode);
+        $putP = getPrice($p, 'buy', $mode);
+        if ($callP === null || $putP === null) continue;
+        $totalCost = $callP + $putP;
         $beUpper = $c['strike'] + $totalCost;
         $beLower = $c['strike'] - $totalCost;
         $uprice  = $c['uprice'];

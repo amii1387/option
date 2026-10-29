@@ -18,6 +18,13 @@ return [
     'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'timeout'    => 25,
     'connect_timeout' => 8,
+    'ca_bundle'  => true, // Validate SSL by default
+
+    // ═══ CORS ═══
+    'cors_domain' => 'https://hseqi.ir',
+
+    // ═══ استراتژی‌ها ═══
+    'min_vol' => 1000000000,
     
     // ═══ لاگ ═══
     'log_retention_days' => 7,   // نگه‌داری لاگ‌ها

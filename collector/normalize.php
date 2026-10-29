@@ -33,7 +33,9 @@ function normalizeTsetmcTradeOption(array $response): array
         $callResult = buildRowFromSide($item, 'buy');
         if ($callResult === false) {
             $stats['skipped_halted']++;
-        } elseif ($callResult === null) {
+        } elseif ($callResult === 'no_strike') {
+            $stats['skipped_no_strike']++;
+        } elseif ($callResult === 'no_last' || $callResult === null) {
             $stats['skipped_no_last']++;
         } else {
             $out[] = $callResult;
@@ -44,7 +46,9 @@ function normalizeTsetmcTradeOption(array $response): array
         $putResult = buildRowFromSide($item, 'sell');
         if ($putResult === false) {
             $stats['skipped_halted']++;
-        } elseif ($putResult === null) {
+        } elseif ($putResult === 'no_strike') {
+            $stats['skipped_no_strike']++;
+        } elseif ($putResult === 'no_last' || $putResult === null) {
             $stats['skipped_no_last']++;
         } else {
             $out[] = $putResult;
@@ -72,18 +76,19 @@ function buildRowFromSide(array $item, string $side)
     // ─── تشخیص سمت ───
     $instrumentName = trim($item[$p . 'InstrumentName'] ?? '');
     if ($instrumentName === '') return null;
+    $instrumentName = normalizeArabicChars($instrumentName);
 
     $stateName = $item[$p . 'statename'] ?? '';
-    if (stripos($stateName, 'متوقف') !== false || stripos($stateName, 'ممنوع') !== false) {
+    if (mb_stripos($stateName, 'متوقف') !== false || mb_stripos($stateName, 'ممنوع') !== false) {
         return false;
     }
 
     // ─── استخراج مقادیر ───
     $strike = extractValue($item[$p . 'QeymateEmal'] ?? null);
-    if ($strike === null || $strike <= 0) return null;
+    if ($strike === null || $strike <= 0) return 'no_strike';
 
     $last = extractValue($item[$p . 'LastPrice'] ?? null);
-    if ($last === null || $last <= 0) return null;
+    if ($last === null || $last <= 0) return 'no_last';
 
     $bid = extractValue($item[$p . 'BuyPrice'] ?? null) ?? 0;
     
@@ -111,6 +116,8 @@ function buildRowFromSide(array $item, string $side)
     // ─── خروجی به ساختار Excel قدیمی ───
     return [
         'نماد'              => $instrumentName,
+        'underlying'        => extractUnderlying($instrumentName),
+        'side'              => $side === 'buy' ? 'call' : 'put',
         'قیمت اعمال'        => $strike,
         'تاریخ اعمال'       => $expiryJalali,
         'ارزش معاملات'      => $tradeValue,
@@ -123,6 +130,28 @@ function buildRowFromSide(array $item, string $side)
     ];
 }
 
+function normalizeArabicChars(string $str): string {
+    $arabic = ['ي', 'ك', 'ى', 'ئ', '‌', '‏', ' '];
+    $persian = ['ی', 'ک', 'ی', 'ی', '', '', ''];
+    return str_replace($arabic, $persian, $str);
+}
+function extractUnderlying(string $sym): string {
+    $umap = [
+        'هرم'=>'اهرم','خود'=>'خودرو','سپا'=>'خساپا','ستا'=>'شستا',
+        'شنا'=>'شپنا','ملت'=>'وبملت','ملی'=>'فملی','ملي'=>'فملی',
+        'صاد'=>'وبصادر','جار'=>'وتجارت','تاص'=>'تاصیکو','جوا'=>'جوانه کوچک',
+        'مخا'=>'اخابر','همن'=>'خبهمن','ستر'=>'خگستر','راز'=>'هم تراز',
+        'درو'=>'دارونو'
+    ];
+    $b = trim($sym);
+    $firstChar = mb_substr($b, 0, 1, 'UTF-8');
+    if ($firstChar === 'ض' || $firstChar === 'ط' || $firstChar === 'ح') {
+        $b = mb_substr($b, 1, null, 'UTF-8');
+    }
+    $b = preg_replace('/[0-9٠-٩۰-۹]+$/u', '', $b);
+    $b = trim($b);
+    return $umap[$b] ?? $b;
+}
 /**
  * استخراج مقدار از object {value: X, state: Y}
  */

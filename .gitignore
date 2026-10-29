@@ -1,0 +1,4 @@
+data/*.json
+data/*.lock
+logs/
+.DS_Store

@@ -4,7 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ترمینال اختیار معامله بورس تهران</title>
-<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+@font-face {
+    font-family: "Vazirmatn";
+    src: url("https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.0.0/Vazirmatn-font-face.css") format("css");
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+}
+</style>
 <link rel="stylesheet" href="assets/style.css?v=6.1">
 <script src="assets/app.js?v=6.1" defer></script>
 </head>
@@ -22,6 +30,7 @@
                 <div class="circular-timer"><svg class="timer-svg" viewBox="0 0 36 36"><path class="timer-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" /><path class="timer-path" id="timer-path" stroke-dasharray="100, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" /></svg><div class="timer-text persian-num" id="cd">۶۰</div></div>
                 <button class="btn-sm" id="btn-refresh" onclick="manRefresh()">آپدیت کش</button>
                 <button class="btn-sm" id="btn-force" onclick="forceUpdateData()">فورس سرور</button>
+                <button class="btn-sm" id="btn-price-basis" onclick="togglePriceBasis()">مبنا: آخرین</button>
                 <button class="btn-sm icon-btn" id="theme-toggle" onclick="toggleTheme()" title="تغییر پوسته">🌙</button>
             </div>
         </div>
@@ -258,5 +267,6 @@
         <div class="cm-section-label">برآیند استراتژی</div><div class="cm-results" id="cm-results"></div>
     </div>
 </div>
+<script>updatePriceBasisUI();</script>
 </body>
 </html>

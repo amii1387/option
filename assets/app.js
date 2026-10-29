@@ -102,13 +102,13 @@ function syncCascadingFilters(data, idU, idE) {
     const elU = document.getElementById(idU), elE = document.getElementById(idE);
     if (!elU || !elE || !data) return;
     const curU = elU.value, curE = elE.value;
-    const validUnds = [...new Set(data.filter(s => !curE || (s.expiry || s['تاریخ اعمال']) === curE).map(s => s.underlying || extractUnderlying(s['نماد'])))].sort();
-    const validExps = [...new Set(data.filter(s => !curU || (s.underlying || extractUnderlying(s['نماد'])) === curU).map(s => s.expiry || s['تاریخ اعمال']))].sort();
+    const validUnds = [...new Set(data.filter(s => !curE || (s.expiry || s['تاریخ اعمال']) === curE).map(s => s.underlying || s.underlying))].sort();
+    const validExps = [...new Set(data.filter(s => !curU || (s.underlying || s.underlying) === curU).map(s => s.expiry || s['تاریخ اعمال']))].sort();
     elU.innerHTML = '<option value="">همه</option>' + validUnds.map(u => `<option value="${esc(u)}"${u === curU ? ' selected' : ''}>${esc(u)}</option>`).join('');
     elE.innerHTML = '<option value="">همه</option>' + validExps.map(e => `<option value="${esc(e)}"${e === curE ? ' selected' : ''}>${toFaDigit(esc(e))}</option>`).join('');
 }
 
-function extractUnderlying(sym) {
+function row.underlying {
     const umap = {'هرم':'اهرم','خود':'خودرو','سپا':'خساپا','ستا':'شستا','شنا':'شپنا','ملت':'وبملت','ملی':'فملی','صاد':'وبصادر','جار':'وتجارت'};
     let b = (sym || '').replace(/^[ضطح]/, '').replace(/[0-9۰-۹]+$/, '').trim();
     return umap[b] || b;
@@ -130,25 +130,55 @@ function bsCalc(isCall, S, K, T, r, sigma) {
     let price = isCall ? (S * cndf(d1) - K * Math.exp(-r * T) * cndf(d2)) : (K * Math.exp(-r * T) * cndf(-d2) - S * cndf(-d1));
     return { price: Math.max(0, price), delta: isCall ? cndf(d1) : cndf(d1) - 1 };
 }
+function bsCalc(isCall, S, K, T, r, sigma) {
+    const d1 = (Math.log(S / K) + (r + 0.5 * sigma * sigma) * T) / (sigma * Math.sqrt(T));
+    const d2 = d1 - sigma * Math.sqrt(T);
+    return isCall ? (S * cndf(d1) - K * Math.exp(-r * T) * cndf(d2)) : (K * Math.exp(-r * T) * cndf(-d2) - S * cndf(-d1));
+}
+
 function findIV(isCall, S, K, T, r, marketPrice) {
     if (marketPrice <= 0 || S <= 0 || K <= 0 || T <= 0) return null;
+    let intrinsic = isCall ? Math.max(0, S - K) : Math.max(0, K - S);
+    if (marketPrice < intrinsic) return null;
+
     let sigma = 0.4;
     for (let i = 0; i < 35; i++) {
         const d1 = (Math.log(S / K) + (r + 0.5 * sigma * sigma) * T) / (sigma * Math.sqrt(T));
-        const d2 = d1 - sigma * Math.sqrt(T);
-        let p = isCall ? (S * cndf(d1) - K * Math.exp(-r * T) * cndf(d2)) : (K * Math.exp(-r * T) * cndf(-d2) - S * cndf(-d1));
+        const p = bsCalc(isCall, S, K, T, r, sigma);
         const diff = p - marketPrice;
         if (Math.abs(diff) < 0.1) return sigma * 100;
         const vega = S * Math.sqrt(T) * npdf(d1);
         if (vega < 1e-6) break;
         sigma -= diff / vega;
-        if (sigma <= 0.01) sigma = 0.01;
-        if (sigma > 3.0) return null;
+        if (sigma <= 0.001) sigma = 0.001;
+        if (sigma > 5.0) return null;
     }
-    return sigma * 100;
+
+    // Bisection Fallback
+    let low = 0.001, high = 5.0;
+    for (let i = 0; i < 50; i++) {
+        let mid = (low + high) / 2;
+        let p = bsCalc(isCall, S, K, T, r, mid);
+        if (Math.abs(p - marketPrice) < 0.1) return mid * 100;
+        if (p < marketPrice) low = mid;
+        else high = mid;
+    }
+    return null;
 }
 
 /* ══ FETCH & BOOT ══ */
+function togglePriceBasis() {
+    priceBasis = priceBasis === 'last' ? 'exec' : 'last';
+    localStorage.setItem('priceBasis', priceBasis);
+    updatePriceBasisUI();
+    manRefresh();
+}
+function updatePriceBasisUI() {
+    const btn = document.getElementById('btn-price-basis');
+    if(btn) {
+        btn.innerHTML = priceBasis === 'last' ? 'مبنا: آخرین' : 'مبنا: اجرایی';
+    }
+}
 async function forceUpdateData() {
     try {
         setBtnLoading('btn-force', true); updateLiveStatus(-1, 'در حال تریگر سرور...'); clearInterval(cdInt);
@@ -362,7 +392,7 @@ function renderWatchlist() {
     const filtered = allOptionsRows.filter(row => {
         const sym = row['نماد'] || ''; const isCall = sym.startsWith('ض');
         if (isCall) callsCount++; else putsCount++;
-        const und = extractUnderlying(sym), exp = row['تاریخ اعمال'] || '', vol = parseFloat(row['ارزش معاملات']) || 0;
+        const und = row.underlying || row['نماد'], exp = row['تاریخ اعمال'] || '', vol = parseFloat(row['ارزش معاملات']) || 0;
         if (fSearch && !sym.includes(fSearch) && !und.includes(fSearch)) return false;
         if (fU && und !== fU) return false;
         if (fE && exp !== fE) return false;
@@ -380,7 +410,7 @@ function renderWatchlist() {
         const isCall = (row['نماد'] || '').startsWith('ض');
         const S = parseFloat(row['_base']) || 0, K = parseFloat(row['قیمت اعمال']) || 0;
         const T = Math.max(1, parseInt(row['_daysLeft']) || 1) / 365, P = parseFloat(row['آخرین قیمت']) || 0, vol = parseFloat(row['ارزش معاملات']) || 0;
-        const key = `${extractUnderlying(row['نماد'])}|${row['تاریخ اعمال']}|${isCall ? 'C' : 'P'}`;
+        const key = `${row.underlying}|${row['تاریخ اعمال']}|${isCall ? 'C' : 'P'}`;
         const iv = findIV(isCall, S, K, T, r, P);
         if (iv && vol > 0) {
             if (!wivMap[key]) wivMap[key] = { sumIVxVol: 0, sumVol: 0 };
@@ -391,7 +421,7 @@ function renderWatchlist() {
     const tbody = document.getElementById('watch-tb');
     if (!tbody) return;
     tbody.innerHTML = filtered.map((row, idx) => {
-        const sym = row['نماد'] || '', isCall = sym.startsWith('ض'), und = extractUnderlying(sym), exp = row['تاریخ اعمال'] || '';
+        const sym = row['نماد'] || '', isCall = row.side === 'call' || sym.startsWith('ض'), und = row.underlying || sym, exp = row['تاریخ اعمال'] || '';
         const S = parseFloat(row['_base']) || 0, K = parseFloat(row['قیمت اعمال']) || 0, T = Math.max(1, parseInt(row['_daysLeft']) || 1) / 365;
         const P = parseFloat(row['آخرین قیمت']) || 0, vol = parseFloat(row['ارزش معاملات']) || 0;
         const be = isCall ? (K + P) : (K - P);
@@ -410,7 +440,7 @@ function renderChain() {
     syncCascadingFilters(allOptionsRows, 'chain-fu', 'chain-fe');
     const fU = document.getElementById('chain-fu')?.value || '', fE = document.getElementById('chain-fe')?.value || '';
     const targetPrice = parseFloat(toEnDigit(document.getElementById('chain-target')?.value)) || 0;
-    let list = allOptionsRows.filter(r => (!fU || extractUnderlying(r['نماد']) === fU) && (!fE || r['تاریخ اعمال'] === fE));
+    let list = allOptionsRows.filter(r => (!fU || r.underlying === fU) && (!fE || r['تاریخ اعمال'] === fE));
     const strikesMap = {}; let currentS = 0;
     list.forEach(row => {
         const sym = row['نماد'] || '', isCall = sym.startsWith('ض'), K = parseFloat(row['قیمت اعمال']) || 0;
