@@ -2,7 +2,12 @@
 $cfg = require __DIR__ . '/config.php';
 
 $price_mode = isset($_GET['price']) && $_GET['price'] === 'exec' ? 'exec' : 'last';
-$latestFile = $cfg['data_dir'] . "/latest_{$price_mode}.json";
+$fees_mode = isset($_GET['fees']) && $_GET['fees'] === '0' ? '0' : '1';
+$latestFile = $cfg['data_dir'] . "/latest_{$price_mode}_{$fees_mode}.json";
+if (!file_exists($latestFile)) {
+    // fallback if no fee files yet
+    $latestFile = $cfg['data_dir'] . "/latest_{$price_mode}.json";
+}
 if (!file_exists($latestFile)) {
     $latestFile = $cfg['data_dir'] . '/latest.json';
 }
@@ -18,7 +23,7 @@ if (!file_exists($latestFile)) {
 // مدیریت ETag برای کش
 $mtime_latest = file_exists($latestFile) ? filemtime($latestFile) : 0;
 $mtime_status = file_exists($statusFile) ? filemtime($statusFile) : 0;
-$etag = '"' . md5($mtime_latest . '_' . $mtime_status . '_' . $price_mode) . '"';
+$etag = '"' . md5($mtime_latest . "_" . $mtime_status . "_" . $price_mode . "_" . $fees_mode) . '"';
 
 header('Cache-Control: public, max-age=15'); 
 header('ETag: ' . $etag);

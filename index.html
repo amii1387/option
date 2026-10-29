@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="fa" dir="rtl" data-theme="light">
 <head>
+<link rel="shortcut icon" href="data:image/x-icon;," type="image/x-icon">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ترمینال اختیار معامله بورس تهران</title>
@@ -31,6 +32,7 @@
                 <button class="btn-sm" id="btn-refresh" onclick="manRefresh()">آپدیت کش</button>
                 <button class="btn-sm" id="btn-force" onclick="forceUpdateData()">فورس سرور</button>
                 <button class="btn-sm" id="btn-price-basis" onclick="togglePriceBasis()">مبنا: آخرین</button>
+                <button class="btn-sm" id="btn-fees" onclick="toggleFees()">کارمزد: فعال</button>
                 <button class="btn-sm icon-btn" id="theme-toggle" onclick="toggleTheme()" title="تغییر پوسته">🌙</button>
             </div>
         </div>
@@ -267,6 +269,6 @@
         <div class="cm-section-label">برآیند استراتژی</div><div class="cm-results" id="cm-results"></div>
     </div>
 </div>
-<script>updatePriceBasisUI();</script>
+<script>document.addEventListener("DOMContentLoaded", function() { if (typeof updatePriceBasisUI === "function") updatePriceBasisUI(); });</script>
 </body>
 </html>

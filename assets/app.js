@@ -108,7 +108,7 @@ function syncCascadingFilters(data, idU, idE) {
     elE.innerHTML = '<option value="">همه</option>' + validExps.map(e => `<option value="${esc(e)}"${e === curE ? ' selected' : ''}>${toFaDigit(esc(e))}</option>`).join('');
 }
 
-function row.underlying {
+function extractUnderlying(sym) {
     const umap = {'هرم':'اهرم','خود':'خودرو','سپا':'خساپا','ستا':'شستا','شنا':'شپنا','ملت':'وبملت','ملی':'فملی','صاد':'وبصادر','جار':'وتجارت'};
     let b = (sym || '').replace(/^[ضطح]/, '').replace(/[0-9۰-۹]+$/, '').trim();
     return umap[b] || b;
@@ -170,15 +170,23 @@ function findIV(isCall, S, K, T, r, marketPrice) {
 function togglePriceBasis() {
     priceBasis = priceBasis === 'last' ? 'exec' : 'last';
     localStorage.setItem('priceBasis', priceBasis);
-    updatePriceBasisUI();
+    updateUIStates();
     manRefresh();
 }
-function updatePriceBasisUI() {
-    const btn = document.getElementById('btn-price-basis');
-    if(btn) {
-        btn.innerHTML = priceBasis === 'last' ? 'مبنا: آخرین' : 'مبنا: اجرایی';
-    }
+function toggleFees() {
+    useFees = !useFees;
+    localStorage.setItem('useFees', useFees);
+    updateUIStates();
+    manRefresh();
 }
+function updateUIStates() {
+    const btnP = document.getElementById('btn-price-basis');
+    if(btnP) btnP.innerHTML = priceBasis === 'last' ? 'مبنا: آخرین' : 'مبنا: اجرایی';
+    const btnF = document.getElementById('btn-fees');
+    if(btnF) btnF.innerHTML = useFees ? 'کارمزد: فعال' : 'کارمزد: غیرفعال';
+}
+// For backward compat on existing page load script
+function updatePriceBasisUI() { updateUIStates(); }
 async function forceUpdateData() {
     try {
         setBtnLoading('btn-force', true); updateLiveStatus(-1, 'در حال تریگر سرور...'); clearInterval(cdInt);
