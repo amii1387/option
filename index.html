@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="fa" dir="rtl" data-theme="light">
 <head>
+<link rel="shortcut icon" href="data:image/x-icon;," type="image/x-icon">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ترمینال اختیار معامله بورس تهران</title>
@@ -267,6 +268,6 @@
         <div class="cm-section-label">برآیند استراتژی</div><div class="cm-results" id="cm-results"></div>
     </div>
 </div>
-<script>updatePriceBasisUI();</script>
+<script>document.addEventListener("DOMContentLoaded", function() { if (typeof updatePriceBasisUI === "function") updatePriceBasisUI(); });</script>
 </body>
 </html>

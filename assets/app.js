@@ -108,7 +108,7 @@ function syncCascadingFilters(data, idU, idE) {
     elE.innerHTML = '<option value="">همه</option>' + validExps.map(e => `<option value="${esc(e)}"${e === curE ? ' selected' : ''}>${toFaDigit(esc(e))}</option>`).join('');
 }
 
-function row.underlying {
+function extractUnderlying(sym) {
     const umap = {'هرم':'اهرم','خود':'خودرو','سپا':'خساپا','ستا':'شستا','شنا':'شپنا','ملت':'وبملت','ملی':'فملی','صاد':'وبصادر','جار':'وتجارت'};
     let b = (sym || '').replace(/^[ضطح]/, '').replace(/[0-9۰-۹]+$/, '').trim();
     return umap[b] || b;
